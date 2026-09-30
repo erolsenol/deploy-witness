@@ -258,13 +258,15 @@ Detaylı mimari, scope, güvenlik modeli ve release kapıları [`tasks/plan.md`]
 **İş:** Report v1 uyumluluğunu koruyarak deployment kimliği, run window, source freshness, digest ve decision policy semantiğini yazılı dondur.
 
 **Kabul ölçütleri:**
-- [ ] PASS/FAIL/INCOMPLETE ve required/optional/WARN karar matrisi yayınlanır.
-- [ ] Her kanıt sınıfının neyi kanıtlamadığı örnek raporla gösterilir.
-- [ ] Verilen run-start sınırından eski deployment PASS üretemez; sınır yoksa rapor korelasyon eksikliğini WARN olarak açıklar.
+- [x] PASS/FAIL/INCOMPLETE ve required/optional/WARN karar matrisi yayınlanır.
+- [x] Her kanıt sınıfının neyi kanıtlamadığı örnek raporla gösterilir.
+- [x] Verilen run-start sınırından eski deployment PASS üretemez; sınır yoksa rapor korelasyon eksikliğini WARN olarak açıklar.
 
 **Doğrulama:** JSON Schema ve rapor örnekleri doğrulanır; report v1 consumer fixture’ları korunur.
 **Bağımlılık:** Mevcut report/config v1 incelemesi.
 **Boyut:** M.
+
+**İlerleme:** `docs/adr/0001-evidence-and-freshness-v1.md` report v1 karar matrisini, run-start korelasyon sınırlarını ve her kanıtın neyi kanıtlamadığını tanımlıyor. Üç yayımlanabilir JSON rapor örneği şemaya karşı test ediliyor; mevcut core testleri stale deployment'ın FAIL ve boundary yokluğunun optional WARN olduğunu doğruluyor.
 
 ### DW-R02: Coolify polling dayanıklılığı
 

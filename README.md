@@ -71,6 +71,8 @@ The versioned config and report schemas live in [`schemas/`](schemas/). Regenera
 
 Reports include a `capabilities` inventory. `SUPPORTED` means the adapter can verify that behavior, `UNSUPPORTED` means the adapter does not implement it, and `UNAVAILABLE` means a supported feature could not be confirmed because the provider API was inaccessible during that run. Capability information is informational and does not replace required deployment checks.
 
+See the [report v1 evidence and freshness decision record](docs/adr/0001-evidence-and-freshness-v1.md) for the required/optional decision matrix and evidence limits. Schema-validated [correlated PASS](examples/report-pass-v1.json), [uncorrelated PASS with warning](examples/report-pass-uncorrelated-v1.json), and [stale deployment FAIL](examples/report-stale-v1.json) reports are available as consumer examples.
+
 JUnit output preserves the verification decision: required warnings and failures become failures, required unknown/unsupported/skipped checks become errors, and optional non-pass checks remain skipped so they do not turn an overall PASS into a failing CI result.
 
 ## GitHub Actions
