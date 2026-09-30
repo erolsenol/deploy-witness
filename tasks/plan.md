@@ -1,6 +1,6 @@
 # DeployWitness 0.2+ — Genişletilmiş Ürün ve Teknik Plan
 
-**Durum:** Uygulama sürüyor; Retry-After/backoff, bounded DNS pinning, JUnit çıktısı ve opsiyonel ardışık başarılı runtime probe kontrolü eklendi.
+**Durum:** Uygulama sürüyor; Retry-After/backoff, bounded DNS pinning, JUnit çıktısı, opsiyonel ardışık başarılı runtime probe kontrolü, config env override’ları ve redacted `config explain` eklendi.
 **Temel:** Public `erolsenol/deploy-witness`, v0.1.0 prerelease.
 **Hedef:** Tek bir sağlayıcı API sonucunu “uygulama kesin doğru sürümde” iddiasına dönüştürmeden; deployment kimliği, gerçek runtime davranışı ve isteğe bağlı build provenance kanıtlarını birleştiren güvenilir, kolay entegre edilebilir bir doğrulama aracı.
 

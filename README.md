@@ -43,6 +43,17 @@ Requirements: Node.js 22 or newer.
 
 Set `COOLIFY_API_TOKEN` in the environment from your secret manager before running `verify`. The GitHub Action and source repository are public. npm registry publication is not available yet; use the source checkout for the CLI or pin the Action to a reviewed commit SHA.
 
+`config validate` checks the effective configuration. `config explain` shows the file path, applied override names, and planned check IDs without printing configuration values. Explicit CLI flags take precedence over these environment variables, which take precedence over YAML/JSON:
+
+| Environment variable | Overrides |
+| --- | --- |
+| `DEPLOY_WITNESS_COOLIFY_BASE_URL` | `coolify.baseUrl` |
+| `DEPLOY_WITNESS_COOLIFY_RESOURCE_UUID` | `coolify.resourceUuid` |
+| `DEPLOY_WITNESS_EXPECTED_SHA` | `deployment.expectedSha` |
+| `DEPLOY_WITNESS_STARTED_AFTER` | `deployment.startedAfter` |
+
+`COOLIFY_API_TOKEN` remains a secret input and is not part of config inspection or reports.
+
 ## GitHub Actions
 
 The Action runs after your deploy step. Store the read-only Coolify API token as a GitHub Actions secret and provide it through the Action input; never put the token in the config file.

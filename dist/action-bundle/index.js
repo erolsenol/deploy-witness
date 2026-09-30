@@ -49637,6 +49637,12 @@ function decide(checks) {
 
 
 const MAX_CONFIG_BYTES = 256 * 1024;
+const CONFIG_ENV_OVERRIDES = {
+    coolifyBaseUrl: "DEPLOY_WITNESS_COOLIFY_BASE_URL",
+    coolifyResourceUuid: "DEPLOY_WITNESS_COOLIFY_RESOURCE_UUID",
+    expectedSha: "DEPLOY_WITNESS_EXPECTED_SHA",
+    startedAfter: "DEPLOY_WITNESS_STARTED_AFTER",
+};
 class ConfigLoadError extends Error {
     code;
     constructor(code, message) {
@@ -49645,7 +49651,7 @@ class ConfigLoadError extends Error {
         this.name = "ConfigLoadError";
     }
 }
-async function loadConfig(path) {
+async function loadConfigDetails(path, options = {}) {
     let source;
     try {
         const file = await (0,promises_namespaceObject.readFile)(path);
@@ -49663,14 +49669,57 @@ async function loadConfig(path) {
     if (document.errors.length > 0) {
         throw new ConfigLoadError("CONFIG_YAML_INVALID", "Configuration is not valid YAML.");
     }
-    const validation = VerificationConfigSchema.safeParse(document.toJS({ maxAliasCount: 0 }));
+    const rawConfig = document.toJS({ maxAliasCount: 0 });
+    const env = options.env ?? process.env;
+    const overrides = Object.entries(CONFIG_ENV_OVERRIDES).flatMap(([field, name]) => (env[name]?.length ? [[field, name]] : []));
+    let configWithOverrides = rawConfig;
+    if (overrides.length > 0 &&
+        typeof rawConfig === "object" &&
+        rawConfig !== null) {
+        const root = rawConfig;
+        const coolify = typeof root.coolify === "object" && root.coolify !== null
+            ? root.coolify
+            : {};
+        const deployment = typeof root.deployment === "object" && root.deployment !== null
+            ? root.deployment
+            : {};
+        configWithOverrides = {
+            ...root,
+            coolify: {
+                ...coolify,
+                ...(env[CONFIG_ENV_OVERRIDES.coolifyBaseUrl]
+                    ? { baseUrl: env[CONFIG_ENV_OVERRIDES.coolifyBaseUrl] }
+                    : {}),
+                ...(env[CONFIG_ENV_OVERRIDES.coolifyResourceUuid]
+                    ? { resourceUuid: env[CONFIG_ENV_OVERRIDES.coolifyResourceUuid] }
+                    : {}),
+            },
+            deployment: {
+                ...deployment,
+                ...(env[CONFIG_ENV_OVERRIDES.expectedSha]
+                    ? { expectedSha: env[CONFIG_ENV_OVERRIDES.expectedSha] }
+                    : {}),
+                ...(env[CONFIG_ENV_OVERRIDES.startedAfter]
+                    ? { startedAfter: env[CONFIG_ENV_OVERRIDES.startedAfter] }
+                    : {}),
+            },
+        };
+    }
+    const validation = VerificationConfigSchema.safeParse(configWithOverrides);
     if (!validation.success) {
         const paths = [
             ...new Set(validation.error.issues.map((issue) => issue.path.join(".") || "<root>")),
         ];
         throw new ConfigLoadError("CONFIG_INVALID", `Configuration is invalid at: ${paths.join(", ")}.`);
     }
-    return validation.data;
+    return {
+        config: validation.data,
+        path,
+        appliedOverrides: overrides.map(([, name]) => name),
+    };
+}
+async function loadConfig(path, options = {}) {
+    return (await loadConfigDetails(path, options)).config;
 }
 //# sourceMappingURL=load.js.map
 // EXTERNAL MODULE: external "node:crypto"

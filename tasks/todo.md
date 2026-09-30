@@ -1,6 +1,6 @@
 # DeployWitness — Uygulama Görev Listesi
 
-> Progress update (2026-09-30): v0.1 MVP remains public. Roadmap slices now add bounded Coolify retries with Retry-After, deployment freshness correlation, pinned public-DNS HTTP probes with explicit localhost opt-in, bounded consecutive-success runtime checks, and JUnit output. Local suite: 59 tests. npm registry publication and provider expansion remain separate roadmap items.
+> Progress update (2026-09-30): v0.1 MVP remains public. Roadmap slices now add bounded Coolify retries with Retry-After, deployment freshness correlation, pinned public-DNS HTTP probes with explicit localhost opt-in, bounded consecutive-success runtime checks, JUnit output, documented environment overrides, and redacted `config explain`. Local suite: 62 tests. npm registry publication and provider expansion remain separate roadmap items.
 
 Bu liste plan onaylandıktan sonra uygulama sırasıdır. Her görev ayrı ve gözden geçirilebilir bir dilim olarak bitirilir; geniş görevler alt görevlere bölünür.
 
@@ -297,7 +297,7 @@ Detaylı mimari, scope, güvenlik modeli ve release kapıları [`tasks/plan.md`]
 **İş:** Env override önceliği, config explain/dry-run, JSON Schema çıktısı ve JUnit formatter ekle.
 
 **Kabul ölçütleri:**
-- [ ] Config açıklaması değerleri ve sırları yazdırmadan kaynak/override sırasını gösterir.
+- [x] Config açıklaması değerleri ve sırları yazdırmadan kaynak/override sırasını gösterir.
 - [ ] JUnit ve JSON aynı check ID/status/decision sonuçlarını temsil eder.
 - [ ] Report v1 ve config v1 tüketicileri için migration sınırları testlidir.
 

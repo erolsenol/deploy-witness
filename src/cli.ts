@@ -2,7 +2,11 @@
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { Command } from "commander";
-import { ConfigLoadError, loadConfig } from "./config/load.js";
+import {
+  ConfigLoadError,
+  loadConfig,
+  loadConfigDetails,
+} from "./config/load.js";
 import { runVerification } from "./core/verify.js";
 import { renderJUnit } from "./reporters/junit.js";
 
@@ -34,9 +38,11 @@ program
     }
   });
 
-program
+const configCommand = program
   .command("config")
-  .description("Configuration commands")
+  .description("Configuration commands");
+
+configCommand
   .command("validate")
   .argument("[path]", "configuration file", "deploy-witness.yml")
   .action(async (path: string) => {
@@ -48,6 +54,51 @@ program
         error instanceof ConfigLoadError
           ? `${error.code}: ${error.message}`
           : "CONFIG_INVALID: Configuration could not be validated.",
+      );
+      process.exitCode = 2;
+    }
+  });
+
+configCommand
+  .command("explain")
+  .description("Show the effective configuration source and planned checks.")
+  .argument("[path]", "configuration file", "deploy-witness.yml")
+  .action(async (path: string) => {
+    try {
+      const loaded = await loadConfigDetails(path);
+      const probeIds = loaded.config.probes.map((probe) => {
+        const id = probe.name
+          .toLowerCase()
+          .replace(/[^a-z0-9.-]+/g, "-")
+          .replace(/^-|-$/g, "")
+          .slice(0, 48);
+        return `http.${id || "probe"}`;
+      });
+      console.log(`Configuration source: ${loaded.path}`);
+      console.log(
+        "Precedence: CLI options > DEPLOY_WITNESS_* environment > config file > CI defaults",
+      );
+      console.log(
+        `Applied environment overrides: ${loaded.appliedOverrides.join(", ") || "none"}`,
+      );
+      console.log("Planned checks:");
+      for (const id of [
+        "provider.coolify-api",
+        "deployment.status",
+        "deployment.commit",
+        "deployment.freshness",
+        ...probeIds,
+      ]) {
+        console.log(`  - ${id}`);
+      }
+      console.log(
+        "Configuration values and secret values are intentionally not displayed.",
+      );
+    } catch (error) {
+      console.error(
+        error instanceof ConfigLoadError
+          ? `${error.code}: ${error.message}`
+          : "CONFIG_INVALID: Configuration could not be inspected.",
       );
       process.exitCode = 2;
     }
