@@ -43,7 +43,7 @@ The Action runs after your deploy step. Store the read-only Coolify API token as
       run: echo "timestamp=$(node -p 'new Date().toISOString()')" >> "$GITHUB_OUTPUT"
 
     - name: Verify deployment
-      uses: erolsenol/deploy-witness@37467fa35ab12547c4037710fd566066a70cd2a8
+      uses: erolsenol/deploy-witness@655b438f8bf85576fce3fa88780778290dfc66d9
       with:
         config: deploy-witness.yml
         coolify-token: ${{ secrets.COOLIFY_READ_ONLY_TOKEN }}
