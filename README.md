@@ -20,19 +20,22 @@ An HTTP 200 alone does not prove that the requested commit is live. Add a versio
 
 Requirements: Node.js 22 or newer.
 
-    npm install --save-dev deploy-witness
-    npx deploy-witness init
-    npx deploy-witness config validate
-    npx deploy-witness verify --expected-sha "$GITHUB_SHA"
+    git clone https://github.com/erolsenol/deploy-witness.git
+    cd deploy-witness
+    npm ci
+    npm run build
+    node dist/cli.js init
+    node dist/cli.js config validate
+    node dist/cli.js verify --expected-sha "$GITHUB_SHA"
 
-Until the npm package is released, use the CLI from a Git checkout or pin the GitHub Action to a reviewed commit SHA.
+Set `COOLIFY_API_TOKEN` in the environment from your secret manager before running `verify`. The GitHub Action and source repository are public. npm registry publication is not available yet; use the source checkout for the CLI or pin the Action to a reviewed commit SHA.
 
 ## GitHub Actions
 
 The Action runs after your deploy step. Store the read-only Coolify API token as a GitHub Actions secret and provide it through the Action input; never put the token in the config file.
 
     - name: Verify deployment
-      uses: erolsenol/deploy-witness@<full-commit-sha>
+      uses: erolsenol/deploy-witness@37467fa35ab12547c4037710fd566066a70cd2a8
       with:
         config: deploy-witness.yml
         coolify-token: ${{ secrets.COOLIFY_READ_ONLY_TOKEN }}
