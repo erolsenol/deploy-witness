@@ -104,6 +104,12 @@ describe("verification orchestration", () => {
     expect(report.decision).toBe("PASS");
     expect(report.provider).toBe("vercel");
     expect(report.resourceUuid).toBe("prj_demo");
+    expect(report.capabilities).toContainEqual(
+      expect.objectContaining({
+        name: "deployment.target-filter",
+        status: "SUPPORTED",
+      }),
+    );
     expect(report.checks.map((check) => check.id)).toEqual([
       "provider.vercel-api",
       "deployment.status",
@@ -111,5 +117,44 @@ describe("verification orchestration", () => {
       "deployment.freshness",
     ]);
     expect(report.checks.every((check) => check.status === "PASS")).toBe(true);
+  });
+
+  it("reports Coolify target and team scope as unsupported", async () => {
+    const report = await runVerification({
+      config,
+      token: "read-only-token",
+      expectedSha,
+      fetchImpl: async () => coolifyResponse(),
+    });
+
+    expect(report.capabilities).toContainEqual(
+      expect.objectContaining({
+        name: "deployment.target-filter",
+        status: "UNSUPPORTED",
+      }),
+    );
+    expect(report.capabilities).toContainEqual(
+      expect.objectContaining({
+        name: "deployment.team-scope",
+        status: "UNSUPPORTED",
+      }),
+    );
+  });
+
+  it("marks supported capabilities unavailable when the provider API rejects access", async () => {
+    const report = await runVerification({
+      config,
+      token: "read-only-token",
+      expectedSha,
+      fetchImpl: async () => new Response("unauthorized", { status: 401 }),
+    });
+
+    expect(report.capabilities).toContainEqual(
+      expect.objectContaining({
+        name: "deployment.lookup",
+        status: "UNAVAILABLE",
+      }),
+    );
+    expect(report.decision).toBe("FAIL");
   });
 });

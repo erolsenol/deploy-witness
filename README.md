@@ -15,6 +15,7 @@ DeployWitness verifies; it does not deploy, roll back, run migrations, or change
 - Configured health endpoints and optional version markers respond as expected.
 - Optional stability checks can require several consecutive successful responses after the deployment.
 - Every check is reported separately, with missing or unknown evidence kept visible.
+- Provider capabilities are reported as `SUPPORTED`, `UNSUPPORTED`, or `UNAVAILABLE` for this run, so consumers can distinguish missing support from an inaccessible provider API.
 
 An HTTP 200 alone does not prove that the requested commit is live. Add a version endpoint or response header if you need an independent runtime commit check.
 
@@ -64,6 +65,8 @@ The Vercel adapter uses the official [deployment list endpoint](https://vercel.c
 ## JSON Schema contracts
 
 The versioned config and report schemas live in [`schemas/`](schemas/). Regenerate them after changing the Zod contracts with `npm run schema:generate`; CI checks that the committed schemas stay synchronized. You can also print a schema for tooling with `node dist/cli.js schema config` or `node dist/cli.js schema report`. JSON Schema documents structural constraints; run `config validate` for DeployWitness-specific semantic and security validation before using a configuration.
+
+Reports include a `capabilities` inventory. `SUPPORTED` means the adapter can verify that behavior, `UNSUPPORTED` means the adapter does not implement it, and `UNAVAILABLE` means a supported feature could not be confirmed because the provider API was inaccessible during that run. Capability information is informational and does not replace required deployment checks.
 
 JUnit output preserves the verification decision: required warnings and failures become failures, required unknown/unsupported/skipped checks become errors, and optional non-pass checks remain skipped so they do not turn an overall PASS into a failing CI result.
 
