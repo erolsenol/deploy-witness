@@ -56,4 +56,60 @@ describe("verification orchestration", () => {
         ?.failureCode,
     ).toBe("DEPLOYMENT_STALE");
   });
+
+  it("verifies a Vercel production deployment with its Git source SHA", async () => {
+    const vercelConfig = VerificationConfigSchema.parse({
+      version: 1,
+      provider: "vercel",
+      vercel: {
+        projectId: "prj_demo",
+        teamId: "team_demo",
+        target: "production",
+      },
+      deployment: { timeoutSeconds: 10, pollIntervalSeconds: 1 },
+      probes: [],
+    });
+    const createdAt = Date.now();
+    const fetchImpl = async (input: string | URL | Request) => {
+      const url = new URL(
+        input instanceof Request ? input.url : input.toString(),
+      );
+      if (url.pathname === "/v7/deployments") {
+        expect(url.searchParams.get("projectId")).toBe("prj_demo");
+        expect(url.searchParams.get("teamId")).toBe("team_demo");
+        expect(url.searchParams.get("target")).toBe("production");
+        return Response.json({
+          deployments: [{ uid: "dpl_demo", createdAt }],
+        });
+      }
+      expect(url.pathname).toBe("/v13/deployments/dpl_demo");
+      expect(url.searchParams.get("withGitRepoInfo")).toBe("true");
+      return Response.json({
+        id: "dpl_demo",
+        projectId: "prj_demo",
+        readyState: "READY",
+        target: "production",
+        createdAt,
+        gitSource: { sha: expectedSha },
+      });
+    };
+    const report = await runVerification({
+      config: vercelConfig,
+      token: "vercel-read-token",
+      expectedSha,
+      startedAfter: new Date(createdAt - 1_000).toISOString(),
+      fetchImpl,
+    });
+
+    expect(report.decision).toBe("PASS");
+    expect(report.provider).toBe("vercel");
+    expect(report.resourceUuid).toBe("prj_demo");
+    expect(report.checks.map((check) => check.id)).toEqual([
+      "provider.vercel-api",
+      "deployment.status",
+      "deployment.commit",
+      "deployment.freshness",
+    ]);
+    expect(report.checks.every((check) => check.status === "PASS")).toBe(true);
+  });
 });

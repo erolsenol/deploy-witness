@@ -56,6 +56,8 @@ describe("configuration loading", () => {
       },
     });
 
+    if (loaded.config.provider !== "coolify")
+      throw new Error("Expected a Coolify configuration.");
     expect(loaded.config.coolify.baseUrl).toBe("https://env.example.test");
     expect(loaded.config.coolify.resourceUuid).toBe("env-app");
     expect(loaded.config.deployment.expectedSha).toBe("b".repeat(40));
@@ -84,6 +86,27 @@ describe("configuration loading", () => {
         env: { DEPLOY_WITNESS_COOLIFY_BASE_URL: "not-a-url-secret-value" },
       }),
     ).rejects.not.toThrow("not-a-url-secret-value");
+  });
+
+  it("applies Vercel project, team, and target environment overrides", async () => {
+    const path = await configFile(
+      `version: 1\nprovider: vercel\nvercel:\n  projectId: file-project\n  target: preview\ndeployment: {}\n`,
+    );
+    const config = await loadConfig(path, {
+      env: {
+        DEPLOY_WITNESS_VERCEL_PROJECT_ID: "prj_environment",
+        DEPLOY_WITNESS_VERCEL_TEAM_ID: "team_environment",
+        DEPLOY_WITNESS_VERCEL_TARGET: "production",
+      },
+    });
+
+    if (config.provider !== "vercel")
+      throw new Error("Expected a Vercel configuration.");
+    expect(config.vercel).toMatchObject({
+      projectId: "prj_environment",
+      teamId: "team_environment",
+      target: "production",
+    });
   });
 
   it("rejects unknown credential fields without echoing their value", async () => {

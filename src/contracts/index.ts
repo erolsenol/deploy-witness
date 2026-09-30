@@ -44,7 +44,7 @@ export const VerificationReportSchema = z.object({
   runId: z.string().uuid(),
   createdAt: z.string().datetime({ offset: true }),
   expectedSha: z.string().regex(/^[a-f0-9]{40,64}$/i),
-  provider: z.literal("coolify"),
+  provider: z.enum(["coolify", "vercel"]),
   resourceUuid: z.string().min(1),
   decision: z.enum(["PASS", "FAIL", "INCOMPLETE"]),
   checks: z.array(CheckResultSchema),
@@ -89,9 +89,25 @@ const HttpProbeSchema = z
   })
   .strict();
 
-export const VerificationConfigSchema = z
-  .object({
-    version: z.literal(1),
+const CommonConfigSchema = z.object({
+  version: z.literal(1),
+  provider: z.enum(["coolify", "vercel"]),
+  deployment: z
+    .object({
+      expectedSha: z
+        .string()
+        .regex(/^[a-f0-9]{40,64}$/i)
+        .optional(),
+      startedAfter: z.string().datetime({ offset: true }).optional(),
+      timeoutSeconds: z.number().int().min(10).max(1800).default(600),
+      pollIntervalSeconds: z.number().int().min(1).max(60).default(5),
+    })
+    .strict(),
+  probes: z.array(HttpProbeSchema).max(20).default([]),
+});
+
+export const VerificationConfigSchema = z.discriminatedUnion("provider", [
+  CommonConfigSchema.extend({
     provider: z.literal("coolify"),
     coolify: z
       .object({
@@ -99,20 +115,18 @@ export const VerificationConfigSchema = z
         resourceUuid: z.string().min(1).max(128),
       })
       .strict(),
-    deployment: z
+  }).strict(),
+  CommonConfigSchema.extend({
+    provider: z.literal("vercel"),
+    vercel: z
       .object({
-        expectedSha: z
-          .string()
-          .regex(/^[a-f0-9]{40,64}$/i)
-          .optional(),
-        startedAfter: z.string().datetime({ offset: true }).optional(),
-        timeoutSeconds: z.number().int().min(10).max(1800).default(600),
-        pollIntervalSeconds: z.number().int().min(1).max(60).default(5),
+        projectId: z.string().min(1).max(128),
+        teamId: z.string().min(1).max(128).optional(),
+        target: z.enum(["production", "preview"]),
       })
       .strict(),
-    probes: z.array(HttpProbeSchema).max(20).default([]),
-  })
-  .strict();
+  }).strict(),
+]);
 
 export type CheckStatus = z.infer<typeof CheckStatusSchema>;
 export type Evidence = z.infer<typeof EvidenceSchema>;

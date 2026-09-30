@@ -1,6 +1,6 @@
 # DeployWitness — Uygulama Görev Listesi
 
-> Progress update (2026-09-30): v0.1 MVP remains public. Roadmap slices now add bounded Coolify retries with Retry-After, deployment freshness correlation, pinned public-DNS HTTP probes with explicit localhost opt-in, bounded consecutive-success runtime checks, JUnit output, documented environment overrides, redacted `config explain`, and generated config/report JSON Schemas. Local suite: 65 tests. npm registry publication and provider expansion remain separate roadmap items.
+> Progress update (2026-09-30): v0.1 MVP remains public. Completed the Vercel adapter for project/team-scoped production and preview deployment lookup, readiness-state checks, full Git SHA comparison, and freshness correlation. Vercel calls are read-only GET requests; token setup and least-privilege guidance are documented. Local suite: 72 tests. Dedicated authenticated provider staging E2E, the shared provider contract suite (DW-R05), and npm registry publication remain separate roadmap items.
 
 Bu liste plan onaylandıktan sonra uygulama sırasıdır. Her görev ayrı ve gözden geçirilebilir bir dilim olarak bitirilir; geniş görevler alt görevlere bölünür.
 
@@ -326,11 +326,11 @@ Detaylı mimari, scope, güvenlik modeli ve release kapıları [`tasks/plan.md`]
 **İş:** Resmi API sözleşmesi doğrulandıktan sonra Vercel project/team deployment doğrulamasını ekle.
 
 **Kabul ölçütleri:**
-- [ ] Preview/production target, project/team scope, deployment state ve full commit SHA ayrı kanıttır.
-- [ ] Bilinmeyen API state ve eksik commit PASS olmaz.
-- [ ] Minimum token erişimi ve secret kullanımı dokümante edilir.
+- [x] Preview/production target, project/team scope, deployment state ve full commit SHA ayrı kanıttır.
+- [x] Bilinmeyen API state ve eksik commit PASS olmaz.
+- [x] Minimum token erişimi ve secret kullanımı dokümante edilir.
 
-**Doğrulama:** Contract fixture’ları, provider E2E için ayrı opt-in staging workflow.
+**Doğrulama:** Contract fixture’ları yerel testlerle doğrulandı; authenticated provider E2E için ayrı opt-in staging workflow henüz eklenmedi.
 **Bağımlılık:** DW-R05.
 **Boyut:** L.
 

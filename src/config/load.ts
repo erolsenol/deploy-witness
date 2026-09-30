@@ -12,6 +12,9 @@ export const CONFIG_ENV_OVERRIDES = {
   coolifyResourceUuid: "DEPLOY_WITNESS_COOLIFY_RESOURCE_UUID",
   expectedSha: "DEPLOY_WITNESS_EXPECTED_SHA",
   startedAfter: "DEPLOY_WITNESS_STARTED_AFTER",
+  vercelProjectId: "DEPLOY_WITNESS_VERCEL_PROJECT_ID",
+  vercelTeamId: "DEPLOY_WITNESS_VERCEL_TEAM_ID",
+  vercelTarget: "DEPLOY_WITNESS_VERCEL_TARGET",
 } as const;
 
 export interface LoadedConfig {
@@ -66,8 +69,23 @@ export async function loadConfigDetails(
 
   const rawConfig = document.toJS({ maxAliasCount: 0 }) as unknown;
   const env = options.env ?? process.env;
+  const provider =
+    typeof rawConfig === "object" && rawConfig !== null
+      ? (rawConfig as Record<string, unknown>).provider
+      : undefined;
   const overrides = Object.entries(CONFIG_ENV_OVERRIDES).flatMap(
-    ([field, name]) => (env[name]?.length ? [[field, name] as const] : []),
+    ([field, name]) => {
+      const isProviderOverride =
+        field.startsWith("coolify") || field.startsWith("vercel");
+      const belongsToProvider = field.startsWith("coolify")
+        ? provider === "coolify"
+        : field.startsWith("vercel")
+          ? provider === "vercel"
+          : true;
+      return env[name]?.length && (!isProviderOverride || belongsToProvider)
+        ? [[field, name] as const]
+        : [];
+    },
   );
   let configWithOverrides = rawConfig;
   if (
@@ -80,21 +98,47 @@ export async function loadConfigDetails(
       typeof root.coolify === "object" && root.coolify !== null
         ? (root.coolify as Record<string, unknown>)
         : {};
+    const vercel =
+      typeof root.vercel === "object" && root.vercel !== null
+        ? (root.vercel as Record<string, unknown>)
+        : {};
     const deployment =
       typeof root.deployment === "object" && root.deployment !== null
         ? (root.deployment as Record<string, unknown>)
         : {};
     configWithOverrides = {
       ...root,
-      coolify: {
-        ...coolify,
-        ...(env[CONFIG_ENV_OVERRIDES.coolifyBaseUrl]
-          ? { baseUrl: env[CONFIG_ENV_OVERRIDES.coolifyBaseUrl] }
-          : {}),
-        ...(env[CONFIG_ENV_OVERRIDES.coolifyResourceUuid]
-          ? { resourceUuid: env[CONFIG_ENV_OVERRIDES.coolifyResourceUuid] }
-          : {}),
-      },
+      ...(provider === "coolify"
+        ? {
+            coolify: {
+              ...coolify,
+              ...(env[CONFIG_ENV_OVERRIDES.coolifyBaseUrl]
+                ? { baseUrl: env[CONFIG_ENV_OVERRIDES.coolifyBaseUrl] }
+                : {}),
+              ...(env[CONFIG_ENV_OVERRIDES.coolifyResourceUuid]
+                ? {
+                    resourceUuid: env[CONFIG_ENV_OVERRIDES.coolifyResourceUuid],
+                  }
+                : {}),
+            },
+          }
+        : {}),
+      ...(provider === "vercel"
+        ? {
+            vercel: {
+              ...vercel,
+              ...(env[CONFIG_ENV_OVERRIDES.vercelProjectId]
+                ? { projectId: env[CONFIG_ENV_OVERRIDES.vercelProjectId] }
+                : {}),
+              ...(env[CONFIG_ENV_OVERRIDES.vercelTeamId]
+                ? { teamId: env[CONFIG_ENV_OVERRIDES.vercelTeamId] }
+                : {}),
+              ...(env[CONFIG_ENV_OVERRIDES.vercelTarget]
+                ? { target: env[CONFIG_ENV_OVERRIDES.vercelTarget] }
+                : {}),
+            },
+          }
+        : {}),
       deployment: {
         ...deployment,
         ...(env[CONFIG_ENV_OVERRIDES.expectedSha]

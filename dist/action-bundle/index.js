@@ -43433,11 +43433,11 @@ function discriminatorMap(def) {
 }
 const $ZodDiscriminatedUnion = 
 /*@__PURE__*/
-(/* unused pure expression or super */ null && (core.$constructor("$ZodDiscriminatedUnion", (inst, def) => {
+$constructor("$ZodDiscriminatedUnion", (inst, def) => {
     def.inclusive = false;
     $ZodUnion.init(inst, def);
     const _super = inst._zod.parse;
-    util.defineLazyInternal(inst, "propValues", (zod) => {
+    defineLazyInternal(inst, "propValues", (zod) => {
         const propValues = {};
         let undefinedCount = 0;
         for (const option of zod.def.options) {
@@ -43448,7 +43448,7 @@ const $ZodDiscriminatedUnion =
                 undefinedCount++;
             for (const [k, v] of Object.entries(pv)) {
                 if (!Object.prototype.hasOwnProperty.call(propValues, k)) {
-                    util.assignProp(propValues, k, new Set());
+                    util_assignProp(propValues, k, new Set());
                 }
                 for (const val of v) {
                     propValues[k].add(val);
@@ -43461,15 +43461,15 @@ const $ZodDiscriminatedUnion =
     });
     // Checked now rather than in the lookup map below, so an option that lacks the discriminator fails at the `discriminatedUnion` call instead of on the first object parsed. Options whose shape cannot be enumerated without resolving it — pipes and lazies — are left to the map.
     def.options.forEach((option, i) => {
-        const propShape = util.rawShape(option._zod.def);
+        const propShape = rawShape(option._zod.def);
         if (propShape && !Object.prototype.hasOwnProperty.call(propShape, def.discriminator)) {
             throw new Error(`Invalid discriminated union option at index "${i}"`);
         }
     });
-    const disc = util.cached(() => discriminatorMap(def));
+    const disc = cached(() => discriminatorMap(def));
     inst._zod.parse = (payload, ctx) => {
         const input = payload.value;
-        if (!util.isObject(input)) {
+        if (!util_isObject(input)) {
             payload.issues.push({
                 code: "invalid_type",
                 expected: "object",
@@ -43503,7 +43503,7 @@ const $ZodDiscriminatedUnion =
         });
         return payload;
     };
-})));
+});
 const $ZodIntersection = /*@__PURE__*/ $constructor("$ZodIntersection", (inst, def) => {
     $ZodType.init(inst, def);
     inst._zod.parse = (payload, ctx) => {
@@ -48941,17 +48941,17 @@ function xor(options, params) {
         ...util.normalizeParams(params),
     });
 }
-const ZodDiscriminatedUnion = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodDiscriminatedUnion", (inst, def) => {
+const ZodDiscriminatedUnion = /*@__PURE__*/ $constructor("ZodDiscriminatedUnion", (inst, def) => {
     ZodUnion.init(inst, def);
-    core.$ZodDiscriminatedUnion.init(inst, def);
-})));
+    $ZodDiscriminatedUnion.init(inst, def);
+});
 function discriminatedUnion(discriminator, options, params) {
     // const [options, params] = args;
     return new ZodDiscriminatedUnion({
         type: "union",
         options: options,
         discriminator,
-        ...util.normalizeParams(params),
+        ...normalizeParams(params),
     });
 }
 const ZodIntersection = /*@__PURE__*/ $constructor("ZodIntersection", (inst, def) => {
@@ -49563,7 +49563,7 @@ const VerificationReportSchema = object({
     runId: schemas_string().uuid(),
     createdAt: schemas_string().datetime({ offset: true }),
     expectedSha: schemas_string().regex(/^[a-f0-9]{40,64}$/i),
-    provider: literal("coolify"),
+    provider: schemas_enum(["coolify", "vercel"]),
     resourceUuid: schemas_string().min(1),
     decision: schemas_enum(["PASS", "FAIL", "INCOMPLETE"]),
     checks: array(CheckResultSchema),
@@ -49598,14 +49598,9 @@ const HttpProbeSchema = object({
         .optional(),
 })
     .strict();
-const VerificationConfigSchema = object({
+const CommonConfigSchema = object({
     version: literal(1),
-    provider: literal("coolify"),
-    coolify: object({
-        baseUrl: schemas_string().url(),
-        resourceUuid: schemas_string().min(1).max(128),
-    })
-        .strict(),
+    provider: schemas_enum(["coolify", "vercel"]),
     deployment: object({
         expectedSha: schemas_string()
             .regex(/^[a-f0-9]{40,64}$/i)
@@ -49616,8 +49611,26 @@ const VerificationConfigSchema = object({
     })
         .strict(),
     probes: array(HttpProbeSchema).max(20).default([]),
-})
-    .strict();
+});
+const VerificationConfigSchema = discriminatedUnion("provider", [
+    CommonConfigSchema.extend({
+        provider: literal("coolify"),
+        coolify: object({
+            baseUrl: schemas_string().url(),
+            resourceUuid: schemas_string().min(1).max(128),
+        })
+            .strict(),
+    }).strict(),
+    CommonConfigSchema.extend({
+        provider: literal("vercel"),
+        vercel: object({
+            projectId: schemas_string().min(1).max(128),
+            teamId: schemas_string().min(1).max(128).optional(),
+            target: schemas_enum(["production", "preview"]),
+        })
+            .strict(),
+    }).strict(),
+]);
 function decide(checks) {
     const required = checks.filter((check) => check.required);
     if (required.some((check) => check.status === "FAIL"))
@@ -49642,6 +49655,9 @@ const CONFIG_ENV_OVERRIDES = {
     coolifyResourceUuid: "DEPLOY_WITNESS_COOLIFY_RESOURCE_UUID",
     expectedSha: "DEPLOY_WITNESS_EXPECTED_SHA",
     startedAfter: "DEPLOY_WITNESS_STARTED_AFTER",
+    vercelProjectId: "DEPLOY_WITNESS_VERCEL_PROJECT_ID",
+    vercelTeamId: "DEPLOY_WITNESS_VERCEL_TEAM_ID",
+    vercelTarget: "DEPLOY_WITNESS_VERCEL_TARGET",
 };
 class ConfigLoadError extends Error {
     code;
@@ -49671,7 +49687,20 @@ async function loadConfigDetails(path, options = {}) {
     }
     const rawConfig = document.toJS({ maxAliasCount: 0 });
     const env = options.env ?? process.env;
-    const overrides = Object.entries(CONFIG_ENV_OVERRIDES).flatMap(([field, name]) => (env[name]?.length ? [[field, name]] : []));
+    const provider = typeof rawConfig === "object" && rawConfig !== null
+        ? rawConfig.provider
+        : undefined;
+    const overrides = Object.entries(CONFIG_ENV_OVERRIDES).flatMap(([field, name]) => {
+        const isProviderOverride = field.startsWith("coolify") || field.startsWith("vercel");
+        const belongsToProvider = field.startsWith("coolify")
+            ? provider === "coolify"
+            : field.startsWith("vercel")
+                ? provider === "vercel"
+                : true;
+        return env[name]?.length && (!isProviderOverride || belongsToProvider)
+            ? [[field, name]]
+            : [];
+    });
     let configWithOverrides = rawConfig;
     if (overrides.length > 0 &&
         typeof rawConfig === "object" &&
@@ -49680,20 +49709,45 @@ async function loadConfigDetails(path, options = {}) {
         const coolify = typeof root.coolify === "object" && root.coolify !== null
             ? root.coolify
             : {};
+        const vercel = typeof root.vercel === "object" && root.vercel !== null
+            ? root.vercel
+            : {};
         const deployment = typeof root.deployment === "object" && root.deployment !== null
             ? root.deployment
             : {};
         configWithOverrides = {
             ...root,
-            coolify: {
-                ...coolify,
-                ...(env[CONFIG_ENV_OVERRIDES.coolifyBaseUrl]
-                    ? { baseUrl: env[CONFIG_ENV_OVERRIDES.coolifyBaseUrl] }
-                    : {}),
-                ...(env[CONFIG_ENV_OVERRIDES.coolifyResourceUuid]
-                    ? { resourceUuid: env[CONFIG_ENV_OVERRIDES.coolifyResourceUuid] }
-                    : {}),
-            },
+            ...(provider === "coolify"
+                ? {
+                    coolify: {
+                        ...coolify,
+                        ...(env[CONFIG_ENV_OVERRIDES.coolifyBaseUrl]
+                            ? { baseUrl: env[CONFIG_ENV_OVERRIDES.coolifyBaseUrl] }
+                            : {}),
+                        ...(env[CONFIG_ENV_OVERRIDES.coolifyResourceUuid]
+                            ? {
+                                resourceUuid: env[CONFIG_ENV_OVERRIDES.coolifyResourceUuid],
+                            }
+                            : {}),
+                    },
+                }
+                : {}),
+            ...(provider === "vercel"
+                ? {
+                    vercel: {
+                        ...vercel,
+                        ...(env[CONFIG_ENV_OVERRIDES.vercelProjectId]
+                            ? { projectId: env[CONFIG_ENV_OVERRIDES.vercelProjectId] }
+                            : {}),
+                        ...(env[CONFIG_ENV_OVERRIDES.vercelTeamId]
+                            ? { teamId: env[CONFIG_ENV_OVERRIDES.vercelTeamId] }
+                            : {}),
+                        ...(env[CONFIG_ENV_OVERRIDES.vercelTarget]
+                            ? { target: env[CONFIG_ENV_OVERRIDES.vercelTarget] }
+                            : {}),
+                    },
+                }
+                : {}),
             deployment: {
                 ...deployment,
                 ...(env[CONFIG_ENV_OVERRIDES.expectedSha]
@@ -50592,7 +50646,310 @@ async function verifyCoolifyDeployment(options) {
 }
 
 //# sourceMappingURL=verify.js.map
+;// CONCATENATED MODULE: ./dist/providers/vercel/types.js
+
+const NumericTimestampSchema = union([schemas_number(), schemas_string()]).optional();
+const VercelDeploymentListSchema = object({
+    deployments: array(object({
+        uid: schemas_string().optional(),
+        id: schemas_string().optional(),
+        createdAt: NumericTimestampSchema,
+        created: NumericTimestampSchema,
+    })),
+});
+const VercelDeploymentDetailSchema = object({
+    id: schemas_string(),
+    projectId: schemas_string().optional(),
+    readyState: schemas_string(),
+    target: schemas_string().nullable().optional(),
+    createdAt: NumericTimestampSchema,
+    created: NumericTimestampSchema,
+    gitSource: object({
+        sha: schemas_string().optional(),
+    })
+        .nullable()
+        .optional(),
+});
+function vercelTimestamp(deployment) {
+    const raw = deployment.createdAt ?? deployment.created;
+    if (raw === undefined)
+        return undefined;
+    const timestamp = typeof raw === "number" ? raw : Number(raw);
+    return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : undefined;
+}
+//# sourceMappingURL=types.js.map
+;// CONCATENATED MODULE: ./dist/providers/vercel/client.js
+
+const API_BASE_URL = "https://api.vercel.com";
+class VercelApiError extends Error {
+    code;
+    status;
+    constructor(code, status) {
+        super(code);
+        this.code = code;
+        this.status = status;
+        this.name = "VercelApiError";
+    }
+}
+class VercelClient {
+    options;
+    fetchImpl;
+    constructor(options) {
+        this.options = options;
+        this.fetchImpl = options.fetchImpl ?? fetch;
+    }
+    async getJson(url, timeoutMs) {
+        if (!this.options.token)
+            throw new VercelApiError("VERCEL_TOKEN_MISSING");
+        let response;
+        try {
+            response = await this.fetchImpl(url, {
+                method: "GET",
+                headers: {
+                    authorization: `Bearer ${this.options.token}`,
+                    accept: "application/json",
+                },
+                signal: AbortSignal.timeout(Math.max(1, Math.min(timeoutMs, 15_000))),
+                redirect: "error",
+            });
+        }
+        catch {
+            throw new VercelApiError("VERCEL_NETWORK_ERROR");
+        }
+        if (response.status === 401)
+            throw new VercelApiError("VERCEL_UNAUTHORIZED", 401);
+        if (response.status === 403)
+            throw new VercelApiError("VERCEL_FORBIDDEN", 403);
+        if (response.status === 429)
+            throw new VercelApiError("VERCEL_RATE_LIMITED", 429);
+        if (response.status >= 500)
+            throw new VercelApiError("VERCEL_SERVER_ERROR", response.status);
+        if (!response.ok)
+            throw new VercelApiError("VERCEL_HTTP_ERROR", response.status);
+        let payload;
+        try {
+            const text = await response.text();
+            if (new TextEncoder().encode(text).byteLength > 2 * 1024 * 1024)
+                throw new VercelApiError("VERCEL_RESPONSE_TOO_LARGE");
+            payload = JSON.parse(text);
+        }
+        catch (error) {
+            if (error instanceof VercelApiError)
+                throw error;
+            throw new VercelApiError("VERCEL_INVALID_JSON");
+        }
+        return payload;
+    }
+    async listDeployments(target, timeoutMs) {
+        const url = new URL("/v7/deployments", API_BASE_URL);
+        url.searchParams.set("projectId", this.options.projectId);
+        url.searchParams.set("target", target);
+        url.searchParams.set("limit", "20");
+        if (this.options.teamId)
+            url.searchParams.set("teamId", this.options.teamId);
+        const payload = VercelDeploymentListSchema.safeParse(await this.getJson(url, timeoutMs));
+        if (!payload.success)
+            throw new VercelApiError("VERCEL_RESPONSE_INVALID");
+        return payload.data.deployments;
+    }
+    async getDeployment(id, timeoutMs) {
+        const url = new URL(`/v13/deployments/${encodeURIComponent(id)}`, API_BASE_URL);
+        url.searchParams.set("withGitRepoInfo", "true");
+        if (this.options.teamId)
+            url.searchParams.set("teamId", this.options.teamId);
+        const payload = VercelDeploymentDetailSchema.safeParse(await this.getJson(url, timeoutMs));
+        if (!payload.success)
+            throw new VercelApiError("VERCEL_RESPONSE_INVALID");
+        return payload.data;
+    }
+}
+//# sourceMappingURL=client.js.map
+;// CONCATENATED MODULE: ./dist/providers/vercel/verify.js
+
+
+const verify_defaultSleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+function result(id, status, summary, _observedAt, startedAt, evidence = [], failureCode, required = true) {
+    return {
+        id,
+        category: id.startsWith("provider.") ? "provider" : "deployment",
+        required,
+        status,
+        summary,
+        durationMs: Math.max(0, Date.now() - startedAt),
+        evidence,
+        ...(failureCode ? { failureCode } : {}),
+    };
+}
+function evidence(observedAt, field, expected, observed) {
+    return [
+        {
+            source: "vercel",
+            observedAt,
+            field,
+            ...(expected !== undefined ? { expected } : {}),
+            ...(observed !== undefined ? { observed } : {}),
+        },
+    ];
+}
+function apiFailure(error) {
+    if (!(error instanceof VercelApiError))
+        return {
+            code: "VERCEL_REQUEST_FAILED",
+            summary: "The Vercel API request failed safely.",
+        };
+    const descriptions = {
+        VERCEL_TOKEN_MISSING: "Set VERCEL_TOKEN to read deployment information.",
+        VERCEL_UNAUTHORIZED: "Vercel rejected the access token.",
+        VERCEL_FORBIDDEN: "The Vercel token cannot access this project.",
+        VERCEL_RATE_LIMITED: "Vercel rate limited the deployment request.",
+        VERCEL_NETWORK_ERROR: "Vercel could not be reached.",
+        VERCEL_RESPONSE_INVALID: "Vercel returned an unexpected response shape.",
+        VERCEL_INVALID_JSON: "Vercel returned invalid JSON.",
+        VERCEL_RESPONSE_TOO_LARGE: "Vercel response exceeded the safety limit.",
+    };
+    return {
+        code: error.code,
+        summary: descriptions[error.code] ?? "The Vercel API request did not succeed.",
+    };
+}
+function incompleteDeployment(observedAt, startedAt, code, summary) {
+    return [
+        result("provider.vercel-api", "PASS", "Vercel API responded successfully.", observedAt, startedAt),
+        result("deployment.status", "UNKNOWN", summary, observedAt, startedAt, [], code),
+        result("deployment.commit", "UNKNOWN", "No deployment commit is available to compare.", observedAt, startedAt, [], code),
+    ];
+}
+function verify_newestDeployment(deployments) {
+    if (deployments.some((deployment) => vercelTimestamp(deployment) === undefined))
+        return { error: "DEPLOYMENT_ORDER_UNCERTAIN" };
+    const sorted = [...deployments].sort((left, right) => (vercelTimestamp(right) ?? 0) - (vercelTimestamp(left) ?? 0));
+    const newest = sorted[0];
+    if (!newest)
+        return {};
+    if (sorted[1] && vercelTimestamp(sorted[1]) === vercelTimestamp(newest)) {
+        return { error: "DEPLOYMENT_ORDER_UNCERTAIN" };
+    }
+    if (!(newest.uid ?? newest.id))
+        return { error: "DEPLOYMENT_ID_MISSING" };
+    return { deployment: newest };
+}
+function evaluateDeployment(config, deployment, expectedSha, startedAfter, observedAt, startedAt) {
+    const checks = [];
+    const timestamp = vercelTimestamp(deployment);
+    const normalizedTarget = deployment.target ?? "preview";
+    const wantedTarget = config.vercel.target;
+    const targetMatches = normalizedTarget === wantedTarget;
+    const readyState = deployment.readyState;
+    const pending = ["BUILDING", "INITIALIZING", "QUEUED"].includes(readyState);
+    const status = readyState === "READY"
+        ? "PASS"
+        : readyState === "ERROR" || readyState === "CANCELED"
+            ? "FAIL"
+            : "UNKNOWN";
+    checks.push(result("provider.vercel-api", "PASS", "Vercel deployment details were retrieved.", observedAt, startedAt), result("deployment.status", targetMatches ? status : "FAIL", targetMatches
+        ? `Vercel deployment state is ${readyState}.`
+        : `Vercel deployment target ${normalizedTarget} does not match configured target ${wantedTarget}.`, observedAt, startedAt, evidence(observedAt, targetMatches ? "readyState" : "target", targetMatches ? "READY" : wantedTarget, targetMatches ? readyState : normalizedTarget), !targetMatches
+        ? "VERCEL_TARGET_MISMATCH"
+        : pending
+            ? "VERCEL_DEPLOYMENT_PENDING"
+            : status === "UNKNOWN"
+                ? "VERCEL_STATE_UNKNOWN"
+                : status === "FAIL"
+                    ? `VERCEL_${readyState}`
+                    : undefined));
+    const sha = deployment.gitSource?.sha;
+    const shaMatches = sha !== undefined && sha.toLowerCase() === expectedSha.toLowerCase();
+    checks.push(result("deployment.commit", sha === undefined ? "UNKNOWN" : shaMatches ? "PASS" : "FAIL", sha === undefined
+        ? "Vercel did not provide a Git source commit for this deployment."
+        : shaMatches
+            ? "Vercel Git source commit matches the expected full SHA."
+            : "Vercel Git source commit does not match the expected SHA.", observedAt, startedAt, evidence(observedAt, "gitSource.sha", expectedSha, sha ?? null), sha === undefined
+        ? "DEPLOYMENT_COMMIT_MISSING"
+        : shaMatches
+            ? undefined
+            : "DEPLOYMENT_SHA_MISMATCH"));
+    if (startedAfter === undefined) {
+        checks.push(result("deployment.freshness", "WARN", "No run-start boundary was supplied; this deployment cannot be correlated to the current CI run.", observedAt, startedAt, evidence(observedAt, "createdAt", undefined, timestamp ?? null), "DEPLOYMENT_RUN_CORRELATION_UNAVAILABLE", false));
+    }
+    else if (timestamp === undefined) {
+        checks.push(result("deployment.freshness", "UNKNOWN", "Vercel did not provide a usable deployment creation timestamp.", observedAt, startedAt, [], "DEPLOYMENT_ORDER_UNCERTAIN"));
+    }
+    else {
+        const boundary = Date.parse(startedAfter);
+        const fresh = timestamp > boundary;
+        checks.push(result("deployment.freshness", fresh ? "PASS" : "FAIL", fresh
+            ? "Vercel deployment was created after the supplied run-start boundary."
+            : "Vercel deployment was not created strictly after the supplied run-start boundary.", observedAt, startedAt, evidence(observedAt, "createdAt", boundary, timestamp), fresh ? undefined : "DEPLOYMENT_STALE"));
+    }
+    return checks;
+}
+async function verifyVercelDeployment(options) {
+    const now = options.now ?? Date.now;
+    const sleep = options.sleep ?? verify_defaultSleep;
+    const startedAt = now();
+    const deadline = startedAt + options.config.deployment.timeoutSeconds * 1000;
+    const client = new VercelClient({
+        projectId: options.config.vercel.projectId,
+        ...(options.config.vercel.teamId
+            ? { teamId: options.config.vercel.teamId }
+            : {}),
+        token: options.token,
+        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+    });
+    let lastObservedAt = new Date(startedAt).toISOString();
+    while (now() < deadline) {
+        const remainingMs = deadline - now();
+        try {
+            const deployments = await client.listDeployments(options.config.vercel.target, remainingMs);
+            lastObservedAt = new Date(now()).toISOString();
+            if (deployments.length === 0) {
+                await sleep(Math.min(options.config.deployment.pollIntervalSeconds * 1000, Math.max(1, deadline - now())));
+                continue;
+            }
+            const newest = verify_newestDeployment(deployments);
+            if (newest.error) {
+                return incompleteDeployment(lastObservedAt, startedAt, newest.error, "Vercel deployments could not be ordered confidently.");
+            }
+            const id = newest.deployment?.uid ?? newest.deployment?.id;
+            if (!id) {
+                return incompleteDeployment(lastObservedAt, startedAt, "DEPLOYMENT_ID_MISSING", "Vercel did not return a deployment identifier.");
+            }
+            const detail = await client.getDeployment(id, Math.max(1, deadline - now()));
+            lastObservedAt = new Date(now()).toISOString();
+            if (detail.projectId &&
+                detail.projectId !== options.config.vercel.projectId) {
+                return [
+                    result("provider.vercel-api", "PASS", "Vercel API responded successfully.", lastObservedAt, startedAt),
+                    result("deployment.status", "FAIL", "Vercel returned a deployment from a different project.", lastObservedAt, startedAt, evidence(lastObservedAt, "projectId", options.config.vercel.projectId, detail.projectId), "VERCEL_PROJECT_MISMATCH"),
+                    result("deployment.commit", "UNKNOWN", "A matching project deployment is unavailable.", lastObservedAt, startedAt, [], "VERCEL_PROJECT_MISMATCH"),
+                ];
+            }
+            const checks = evaluateDeployment(options.config, detail, options.expectedSha, options.startedAfter, lastObservedAt, startedAt);
+            const statusCheck = checks.find((check) => check.id === "deployment.status");
+            if (statusCheck?.status === "UNKNOWN" &&
+                statusCheck.failureCode === "VERCEL_STATE_UNKNOWN") {
+                return checks;
+            }
+            if (statusCheck?.status === "UNKNOWN") {
+                await sleep(Math.min(options.config.deployment.pollIntervalSeconds * 1000, Math.max(1, deadline - now())));
+                continue;
+            }
+            return checks;
+        }
+        catch (error) {
+            const failure = apiFailure(error);
+            return [
+                result("provider.vercel-api", "FAIL", failure.summary, lastObservedAt, startedAt, [], failure.code),
+                result("deployment.status", "UNKNOWN", "Vercel deployment state is unavailable.", lastObservedAt, startedAt, [], failure.code),
+                result("deployment.commit", "UNKNOWN", "Vercel deployment commit is unavailable.", lastObservedAt, startedAt, [], failure.code),
+            ];
+        }
+    }
+    return incompleteDeployment(lastObservedAt, startedAt, "VERCEL_DEPLOYMENT_TIMEOUT", "No matching Vercel deployment became ready before the verification deadline.");
+}
+//# sourceMappingURL=verify.js.map
 ;// CONCATENATED MODULE: ./dist/core/verify.js
+
 
 
 
@@ -50620,18 +50977,26 @@ async function runVerification(options) {
         !Number.isFinite(Date.parse(startedAfter))) {
         throw new Error("STARTED_AFTER_INVALID");
     }
-    const providerChecks = await verifyCoolifyDeployment({
-        baseUrl: config.coolify.baseUrl,
-        resourceUuid: config.coolify.resourceUuid,
-        token: options.token,
-        expectedSha: options.expectedSha,
-        ...(startedAfter ? { startedAfter } : {}),
-        timeoutSeconds: config.deployment.timeoutSeconds,
-        pollIntervalSeconds: config.deployment.pollIntervalSeconds,
-        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
-    });
+    const providerChecks = config.provider === "coolify"
+        ? await verifyCoolifyDeployment({
+            baseUrl: config.coolify.baseUrl,
+            resourceUuid: config.coolify.resourceUuid,
+            token: options.token,
+            expectedSha: options.expectedSha,
+            ...(startedAfter ? { startedAfter } : {}),
+            timeoutSeconds: config.deployment.timeoutSeconds,
+            pollIntervalSeconds: config.deployment.pollIntervalSeconds,
+            ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+        })
+        : await verifyVercelDeployment({
+            config,
+            token: options.token,
+            expectedSha: options.expectedSha,
+            ...(startedAfter ? { startedAfter } : {}),
+            ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+        });
     const deploymentVerified = providerChecks
-        .filter((result) => result.id === "provider.coolify-api" ||
+        .filter((result) => result.id.startsWith("provider.") ||
         result.id.startsWith("deployment."))
         .every((result) => !result.required || result.status === "PASS");
     const runtimeChecks = deploymentVerified
@@ -50643,8 +51008,10 @@ async function runVerification(options) {
         runId: (0,external_node_crypto_.randomUUID)(),
         createdAt: new Date().toISOString(),
         expectedSha: options.expectedSha,
-        provider: "coolify",
-        resourceUuid: config.coolify.resourceUuid,
+        provider: config.provider,
+        resourceUuid: config.provider === "coolify"
+            ? config.coolify.resourceUuid
+            : config.vercel.projectId,
         decision: decide([...providerChecks, ...runtimeChecks]),
         checks: [...providerChecks, ...runtimeChecks],
     });
@@ -50656,10 +51023,14 @@ async function runVerification(options) {
 
 
 async function main() {
-    const token = getInput("coolify-token", { required: true });
-    core_setSecret(token);
     const configPath = getInput("config", { required: true });
     const config = await loadConfig(configPath);
+    const token = getInput(config.provider === "coolify" ? "coolify-token" : "vercel-token", { required: false });
+    if (!token)
+        throw new Error(config.provider === "coolify"
+            ? "Coolify token is required."
+            : "Vercel token is required.");
+    core_setSecret(token);
     const expectedSha = getInput("expected-sha") ||
         config.deployment.expectedSha ||
         process.env.GITHUB_SHA;

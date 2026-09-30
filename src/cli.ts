@@ -18,7 +18,10 @@ const program = new Command()
   .name("deploy-witness")
   .description("Verify that the expected commit is live after deployment.")
   .version("0.1.0");
-const template = `version: 1\nprovider: coolify\ncoolify:\n  baseUrl: https://coolify.example.com\n  resourceUuid: replace-with-resource-uuid\ndeployment:\n  timeoutSeconds: 600\n  pollIntervalSeconds: 5\nprobes: []\n`;
+const templates = {
+  coolify: `version: 1\nprovider: coolify\ncoolify:\n  baseUrl: https://coolify.example.com\n  resourceUuid: replace-with-resource-uuid\ndeployment:\n  timeoutSeconds: 600\n  pollIntervalSeconds: 5\nprobes: []\n`,
+  vercel: `version: 1\nprovider: vercel\nvercel:\n  projectId: replace-with-vercel-project-id\n  target: production\ndeployment:\n  timeoutSeconds: 600\n  pollIntervalSeconds: 5\nprobes: []\n`,
+} as const;
 
 program
   .command("init")
@@ -26,21 +29,29 @@ program
     "Create a starter configuration without overwriting existing files.",
   )
   .option("-o, --output <path>", "output path", "deploy-witness.yml")
-  .action(async ({ output }: { output: string }) => {
-    try {
-      await writeFile(output, template, {
-        encoding: "utf8",
-        flag: "wx",
-        mode: 0o600,
-      });
-      console.log(`Created ${output}`);
-    } catch {
-      console.error(
-        "Could not create configuration (the path may already exist).",
-      );
-      process.exitCode = 2;
-    }
-  });
+  .option("--provider <provider>", "coolify or vercel", "coolify")
+  .action(
+    async ({ output, provider }: { output: string; provider: string }) => {
+      if (provider !== "coolify" && provider !== "vercel") {
+        console.error("PROVIDER_INVALID: Choose coolify or vercel.");
+        process.exitCode = 2;
+        return;
+      }
+      try {
+        await writeFile(output, templates[provider], {
+          encoding: "utf8",
+          flag: "wx",
+          mode: 0o600,
+        });
+        console.log(`Created ${output}`);
+      } catch {
+        console.error(
+          "Could not create configuration (the path may already exist).",
+        );
+        process.exitCode = 2;
+      }
+    },
+  );
 
 const configCommand = program
   .command("config")
@@ -114,7 +125,9 @@ configCommand
       );
       console.log("Planned checks:");
       for (const id of [
-        "provider.coolify-api",
+        loaded.config.provider === "coolify"
+          ? "provider.coolify-api"
+          : "provider.vercel-api",
         "deployment.status",
         "deployment.commit",
         "deployment.freshness",
@@ -167,10 +180,15 @@ program
           process.exitCode = 2;
           return;
         }
-        const token = process.env.COOLIFY_API_TOKEN;
+        const token =
+          config.provider === "coolify"
+            ? process.env.COOLIFY_API_TOKEN
+            : process.env.VERCEL_TOKEN;
         if (!token) {
           console.error(
-            "COOLIFY_TOKEN_MISSING: Set COOLIFY_API_TOKEN in the environment.",
+            config.provider === "coolify"
+              ? "COOLIFY_TOKEN_MISSING: Set COOLIFY_API_TOKEN in the environment."
+              : "VERCEL_TOKEN_MISSING: Set VERCEL_TOKEN in the environment.",
           );
           process.exitCode = 2;
           return;

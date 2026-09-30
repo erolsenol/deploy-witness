@@ -7,8 +7,11 @@ inputs:
     required: true
     default: deploy-witness.yml
   coolify-token:
-    description: Read-only Coolify API token.
-    required: true
+    description: Read-only Coolify API token; required when provider is coolify.
+    required: false
+  vercel-token:
+    description: Vercel API token with read access to the configured project; required when provider is vercel.
+    required: false
   expected-sha:
     description: Expected full commit SHA; defaults to config or GITHUB_SHA.
     required: false

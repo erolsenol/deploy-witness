@@ -7,6 +7,7 @@ import type {
 import { decide, VerificationReportSchema } from "../contracts/index.js";
 import { verifyHttpProbe } from "../probes/http.js";
 import { verifyCoolifyDeployment } from "../providers/coolify/verify.js";
+import { verifyVercelDeployment } from "../providers/vercel/verify.js";
 
 export interface RunVerificationOptions {
   readonly config: VerificationConfig;
@@ -49,21 +50,30 @@ export async function runVerification(
   ) {
     throw new Error("STARTED_AFTER_INVALID");
   }
-  const providerChecks = await verifyCoolifyDeployment({
-    baseUrl: config.coolify.baseUrl,
-    resourceUuid: config.coolify.resourceUuid,
-    token: options.token,
-    expectedSha: options.expectedSha,
-    ...(startedAfter ? { startedAfter } : {}),
-    timeoutSeconds: config.deployment.timeoutSeconds,
-    pollIntervalSeconds: config.deployment.pollIntervalSeconds,
-    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
-  });
+  const providerChecks =
+    config.provider === "coolify"
+      ? await verifyCoolifyDeployment({
+          baseUrl: config.coolify.baseUrl,
+          resourceUuid: config.coolify.resourceUuid,
+          token: options.token,
+          expectedSha: options.expectedSha,
+          ...(startedAfter ? { startedAfter } : {}),
+          timeoutSeconds: config.deployment.timeoutSeconds,
+          pollIntervalSeconds: config.deployment.pollIntervalSeconds,
+          ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+        })
+      : await verifyVercelDeployment({
+          config,
+          token: options.token,
+          expectedSha: options.expectedSha,
+          ...(startedAfter ? { startedAfter } : {}),
+          ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+        });
 
   const deploymentVerified = providerChecks
     .filter(
       (result) =>
-        result.id === "provider.coolify-api" ||
+        result.id.startsWith("provider.") ||
         result.id.startsWith("deployment."),
     )
     .every((result) => !result.required || result.status === "PASS");
@@ -88,8 +98,11 @@ export async function runVerification(
     runId: randomUUID(),
     createdAt: new Date().toISOString(),
     expectedSha: options.expectedSha,
-    provider: "coolify",
-    resourceUuid: config.coolify.resourceUuid,
+    provider: config.provider,
+    resourceUuid:
+      config.provider === "coolify"
+        ? config.coolify.resourceUuid
+        : config.vercel.projectId,
     decision: decide([...providerChecks, ...runtimeChecks]),
     checks: [...providerChecks, ...runtimeChecks],
   });

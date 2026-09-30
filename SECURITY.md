@@ -6,7 +6,7 @@ Please do not file public issues for suspected security vulnerabilities. Use Git
 
 ## Security boundaries
 
-DeployWitness is designed to observe deployments using read-only provider credentials. It does not deploy or mutate provider resources. Treat provider tokens as secrets and scope them to the smallest read-only permissions available. Do not run workflows that expose deployment secrets on untrusted pull requests.
+DeployWitness is designed to observe deployments using read-only provider credentials. It does not deploy or mutate provider resources. Every Vercel API call uses `GET`; use a Vercel token scoped to the required account/team and a read-only role such as Viewer where available. Limit token lifetime and access to the project being checked. Treat provider tokens as secrets and scope them to the smallest read-only permissions available. Do not run workflows that expose deployment secrets on untrusted pull requests.
 
 The project does not claim that a successful check is a signed attestation or a guarantee of application correctness.
 

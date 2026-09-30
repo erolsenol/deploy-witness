@@ -4,10 +4,19 @@ import { loadConfig } from "../config/load.js";
 import { runVerification } from "../core/verify.js";
 
 async function main(): Promise<void> {
-  const token = core.getInput("coolify-token", { required: true });
-  core.setSecret(token);
   const configPath = core.getInput("config", { required: true });
   const config = await loadConfig(configPath);
+  const token = core.getInput(
+    config.provider === "coolify" ? "coolify-token" : "vercel-token",
+    { required: false },
+  );
+  if (!token)
+    throw new Error(
+      config.provider === "coolify"
+        ? "Coolify token is required."
+        : "Vercel token is required.",
+    );
+  core.setSecret(token);
   const expectedSha =
     core.getInput("expected-sha") ||
     config.deployment.expectedSha ||
