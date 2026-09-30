@@ -49566,6 +49566,13 @@ const VerificationReportSchema = object({
     provider: schemas_enum(["coolify", "vercel"]),
     resourceUuid: schemas_string().min(1),
     decision: schemas_enum(["PASS", "FAIL", "INCOMPLETE"]),
+    capabilities: array(object({
+        name: schemas_string().regex(/^[a-z0-9][a-z0-9.-]*$/),
+        status: schemas_enum(["SUPPORTED", "UNSUPPORTED", "UNAVAILABLE"]),
+        reason: schemas_string().min(1),
+    })
+        .strict())
+        .default([]),
     checks: array(CheckResultSchema),
 });
 const HttpProbeSchema = object({
@@ -50269,6 +50276,69 @@ async function readLimitedBody(response, maxBytes) {
     return new TextDecoder().decode(combined);
 }
 //# sourceMappingURL=http.js.map
+;// CONCATENATED MODULE: ./dist/providers/capabilities.js
+const CAPABILITIES = {
+    coolify: [
+        {
+            name: "deployment.lookup",
+            reason: "The adapter reads application deployment records.",
+        },
+        {
+            name: "deployment.resource-scope",
+            reason: "The application UUID scopes the deployment request.",
+        },
+        {
+            name: "deployment.target-filter",
+            reason: "Coolify adapter does not select production or preview targets.",
+        },
+        {
+            name: "deployment.team-scope",
+            reason: "Coolify adapter does not apply a team scope.",
+        },
+        {
+            name: "deployment.commit-sha",
+            reason: "The adapter compares the commit SHA returned by deployment records.",
+        },
+    ],
+    vercel: [
+        {
+            name: "deployment.lookup",
+            reason: "The adapter reads deployment records for the configured project.",
+        },
+        {
+            name: "deployment.resource-scope",
+            reason: "The configured project ID scopes deployment lookup and is checked in the detail response.",
+        },
+        {
+            name: "deployment.target-filter",
+            reason: "The configured production or preview target scopes deployment lookup.",
+        },
+        {
+            name: "deployment.team-scope",
+            reason: "An optional team ID scopes the Vercel API requests.",
+        },
+        {
+            name: "deployment.commit-sha",
+            reason: "The adapter requests Git source details and compares the full commit SHA.",
+        },
+    ],
+};
+function providerCapabilities(provider, apiAvailable) {
+    return CAPABILITIES[provider].map((capability) => {
+        const unsupported = provider === "coolify" &&
+            ["deployment.target-filter", "deployment.team-scope"].includes(capability.name);
+        if (unsupported)
+            return { ...capability, status: "UNSUPPORTED" };
+        if (!apiAvailable)
+            return {
+                ...capability,
+                status: "UNAVAILABLE",
+                reason: "The provider API did not respond successfully during this run.",
+            };
+        return { ...capability, status: "SUPPORTED" };
+    });
+}
+//# sourceMappingURL=capabilities.js.map
 ;// CONCATENATED MODULE: ./dist/providers/coolify/types.js
 
 const CoolifyDeploymentSchema = object({
@@ -50960,6 +51030,7 @@ async function verifyVercelDeployment(options) {
 
 
 
+
 function skippedRuntimeChecks(config, summary) {
     return config.probes.map((probe) => ({
         id: `http.${probe.name
@@ -51005,6 +51076,9 @@ async function runVerification(options) {
         .filter((result) => result.id.startsWith("provider.") ||
         result.id.startsWith("deployment."))
         .every((result) => !result.required || result.status === "PASS");
+    const providerApiAvailable = providerChecks.some((result) => result.id.endsWith("-api") &&
+        result.category === "provider" &&
+        result.status === "PASS");
     const runtimeChecks = deploymentVerified
         ? await Promise.all(config.probes.map((probe) => verifyHttpProbe(probe, options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})))
         : skippedRuntimeChecks(config, "Runtime probes were not run because provider deployment evidence did not pass.");
@@ -51019,6 +51093,7 @@ async function runVerification(options) {
             ? config.coolify.resourceUuid
             : config.vercel.projectId,
         decision: decide([...providerChecks, ...runtimeChecks]),
+        capabilities: providerCapabilities(config.provider, providerApiAvailable),
         checks: [...providerChecks, ...runtimeChecks],
     });
 }

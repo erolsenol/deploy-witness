@@ -6,6 +6,7 @@ import type {
 } from "../contracts/index.js";
 import { decide, VerificationReportSchema } from "../contracts/index.js";
 import { verifyHttpProbe } from "../probes/http.js";
+import { providerCapabilities } from "../providers/capabilities.js";
 import { verifyCoolifyDeployment } from "../providers/coolify/verify.js";
 import { verifyVercelDeployment } from "../providers/vercel/verify.js";
 
@@ -77,6 +78,12 @@ export async function runVerification(
         result.id.startsWith("deployment."),
     )
     .every((result) => !result.required || result.status === "PASS");
+  const providerApiAvailable = providerChecks.some(
+    (result) =>
+      result.id.endsWith("-api") &&
+      result.category === "provider" &&
+      result.status === "PASS",
+  );
 
   const runtimeChecks = deploymentVerified
     ? await Promise.all(
@@ -104,6 +111,7 @@ export async function runVerification(
         ? config.coolify.resourceUuid
         : config.vercel.projectId,
     decision: decide([...providerChecks, ...runtimeChecks]),
+    capabilities: providerCapabilities(config.provider, providerApiAvailable),
     checks: [...providerChecks, ...runtimeChecks],
   });
 }

@@ -43,6 +43,37 @@
         "INCOMPLETE"
       ]
     },
+    "capabilities": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9.-]*$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUPPORTED",
+              "UNSUPPORTED",
+              "UNAVAILABLE"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
     "checks": {
       "type": "array",
       "items": {
@@ -154,6 +185,7 @@
     "provider",
     "resourceUuid",
     "decision",
+    "capabilities",
     "checks"
   ],
   "additionalProperties": false,

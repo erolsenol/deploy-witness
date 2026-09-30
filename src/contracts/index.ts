@@ -47,6 +47,17 @@ export const VerificationReportSchema = z.object({
   provider: z.enum(["coolify", "vercel"]),
   resourceUuid: z.string().min(1),
   decision: z.enum(["PASS", "FAIL", "INCOMPLETE"]),
+  capabilities: z
+    .array(
+      z
+        .object({
+          name: z.string().regex(/^[a-z0-9][a-z0-9.-]*$/),
+          status: z.enum(["SUPPORTED", "UNSUPPORTED", "UNAVAILABLE"]),
+          reason: z.string().min(1),
+        })
+        .strict(),
+    )
+    .default([]),
   checks: z.array(CheckResultSchema),
 });
 
@@ -132,6 +143,7 @@ export type CheckStatus = z.infer<typeof CheckStatusSchema>;
 export type Evidence = z.infer<typeof EvidenceSchema>;
 export type CheckResult = z.infer<typeof CheckResultSchema>;
 export type VerificationReport = z.infer<typeof VerificationReportSchema>;
+export type ProviderCapability = VerificationReport["capabilities"][number];
 export type HttpProbeConfig = z.infer<typeof HttpProbeSchema>;
 export type VerificationConfig = z.infer<typeof VerificationConfigSchema>;
 
