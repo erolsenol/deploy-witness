@@ -317,7 +317,9 @@ Detaylı mimari, scope, güvenlik modeli ve release kapıları [`tasks/plan.md`]
 - [ ] Her adapter aynı unknown, stale, wrong SHA/resource ve auth senaryolarını geçirir.
 - [ ] Adapter karar motoru içermez; yalnızca provider verisini normalize eder.
 
-**Doğrulama:** Coolify adapter’ı contract suite’e geçirilir; fixture kaynağı belgelenir.
+**İlerleme:** `tests/provider-contract.test.ts` artık Coolify ve Vercel için başarı, SHA uyuşmazlığı, bilinmeyen durum, eksik commit, stale deployment ve auth/redaction senaryolarını ortak kabul kurallarıyla çalıştırıyor. Pagination, identity ve rate-limit davranışları henüz ortak capability sözleşmesine alınmadı; bu görev açık.
+
+**Doğrulama:** Ortak fixture suite’i iki adapter’da aynı karar kurallarını doğrular; fixture’lar test içinde sentetik HTTP yanıtlarıdır, gerçek provider E2E değildir.
 **Bağımlılık:** DW-R01, DW-R02.
 **Boyut:** M.
 
