@@ -1,5 +1,7 @@
 # DeployWitness — Uygulama Görev Listesi
 
+> MVP implementation status (2026-09-30): public repo created; Coolify read-only verifier, HTTP probes, config loader, CLI, Node 24 GitHub Action, JSON report, examples, CI, and 21 unit tests are implemented. npm registry publish is pending registry authentication and trusted-publishing setup; broader provider adapters and Retry-After support remain roadmap work.
+
 Bu liste plan onaylandıktan sonra uygulama sırasıdır. Her görev ayrı ve gözden geçirilebilir bir dilim olarak bitirilir; geniş görevler alt görevlere bölünür.
 
 ## Faz 0 — Ürün sözleşmesi
