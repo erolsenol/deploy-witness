@@ -1,6 +1,6 @@
 # DeployWitness — Uygulama Görev Listesi
 
-> MVP implementation status (2026-09-30): public repo created; Coolify read-only verifier, HTTP probes, config loader, CLI, Node 24 GitHub Action, JSON report, examples, CI, and 21 unit tests are implemented. npm registry publish is pending registry authentication and trusted-publishing setup; broader provider adapters and Retry-After support remain roadmap work.
+> Progress update (2026-09-30): v0.1 MVP remains public. Roadmap slices now add bounded Coolify retries with Retry-After, deployment freshness correlation, pinned public-DNS HTTP probes with explicit localhost opt-in, and JUnit output. Local suite: 57 tests. npm registry publication and provider expansion remain separate roadmap items.
 
 Bu liste plan onaylandıktan sonra uygulama sırasıdır. Her görev ayrı ve gözden geçirilebilir bir dilim olarak bitirilir; geniş görevler alt görevlere bölünür.
 
@@ -248,3 +248,154 @@ Bu liste plan onaylandıktan sonra uygulama sırasıdır. Her görev ayrı ve g�
 - Policy custom check plug-in sözleşmesi, sadece iki gerçek adapter bunu haklı çıkardığında.
 
 Her adapter için acceptance standardı: API sözleşmesi kaynaklı fixture’lar, status coverage, commit identity, failure/unknown handling, token redaction, dokümante minimum permissions ve kendi consumer örneği.
+
+## DeployWitness 0.2+ genişletme planı
+
+Detaylı mimari, scope, güvenlik modeli ve release kapıları [`tasks/plan.md`](plan.md) dosyasındadır. Aşağıdaki işler mevcut unchecked MVP görevlerini silmez veya tamamlanmış saymaz; MVP sonrası eklenti roadmap’idir.
+
+### DW-R01: Kanıt sözleşmesi ve freshness/correlation ADR
+
+**İş:** Report v1 uyumluluğunu koruyarak deployment kimliği, run window, source freshness, digest ve decision policy semantiğini yazılı dondur.
+
+**Kabul ölçütleri:**
+- [ ] PASS/FAIL/INCOMPLETE ve required/optional/WARN karar matrisi yayınlanır.
+- [ ] Her kanıt sınıfının neyi kanıtlamadığı örnek raporla gösterilir.
+- [ ] Verilen run-start sınırından eski deployment PASS üretemez; sınır yoksa rapor korelasyon eksikliğini WARN olarak açıklar.
+
+**Doğrulama:** JSON Schema ve rapor örnekleri doğrulanır; report v1 consumer fixture’ları korunur.
+**Bağımlılık:** Mevcut report/config v1 incelemesi.
+**Boyut:** M.
+
+### DW-R02: Coolify polling dayanıklılığı
+
+**İş:** Retry-After, sınırlı backoff/jitter, global deadline, cancellation ve bounded pagination ekle.
+
+**Kabul ölçütleri:**
+- [x] Yalnızca idempotent transient GET hataları retry edilir; auth/config hataları edilmez.
+- [x] Retry-After ve toplam deadline/maksimum deneme sınırları uygulanır.
+- [x] Supplied run boundary’den eski, missing timestamp veya newest timestamp tie deployment UNKNOWN/FAIL olur, PASS değil.
+
+**Doğrulama:** Fake clock, kontrollü fetch ve Retry-After delta/date fixture’larıyla deterministik testler.
+**Bağımlılık:** DW-R01.
+**Boyut:** M.
+
+### DW-R03: HTTP probe SSRF ve network sınırı
+
+**İş:** Public URL probe’larında DNS/IP ve connect-time güvenliğini, IPv4/IPv6 dahil, gerçekçi biçimde uygula.
+
+**Kabul ölçütleri:**
+- [x] Private, loopback, link-local, metadata, multicast ve mapped-IP blokları reddedilir.
+- [x] DNS rebinding/TOCTOU savunması testle doğrulanır: tüm DNS cevapları kontrol edilir ve soket doğrulanmış IP’ye pinlenir.
+- [x] Redirect kapalı, response byte limiti, timeout ve secret/body redaction korunur.
+
+**Doğrulama:** DNS/resolver sınırları, IPv4/IPv6 edge case’ler, redirects ve oversized stream testleri; threat-model incelemesi.
+**Bağımlılık:** DW-R01.
+**Boyut:** L (alt görevlere bölünerek uygulanacak).
+
+### DW-R04: Config ergonomisi ve report consumer contract
+
+**İş:** Env override önceliği, config explain/dry-run, JSON Schema çıktısı ve JUnit formatter ekle.
+
+**Kabul ölçütleri:**
+- [ ] Config açıklaması değerleri ve sırları yazdırmadan kaynak/override sırasını gösterir.
+- [ ] JUnit ve JSON aynı check ID/status/decision sonuçlarını temsil eder.
+- [ ] Report v1 ve config v1 tüketicileri için migration sınırları testlidir.
+
+**Doğrulama:** CLI integration + format parity testleri ve packed consumer smoke.
+**Bağımlılık:** DW-R01.
+**Boyut:** M.
+
+**Checkpoint R1:** DW-R01–R04 tamamlandığında Coolify ve HTTP probe yanlış PASS riskleri kapatılmış, rapor tüketicileri için geriye uyum korunmuş olmalı.
+
+### DW-R05: Provider contract test suite
+
+**İş:** Adapter status, pagination, identity, rate-limit ve redaction davranışlarını ortak test arayüzüne taşı.
+
+**Kabul ölçütleri:**
+- [ ] Capability support/unsupported/unavailable açıkça raporlanır.
+- [ ] Her adapter aynı unknown, stale, wrong SHA/resource ve auth senaryolarını geçirir.
+- [ ] Adapter karar motoru içermez; yalnızca provider verisini normalize eder.
+
+**Doğrulama:** Coolify adapter’ı contract suite’e geçirilir; fixture kaynağı belgelenir.
+**Bağımlılık:** DW-R01, DW-R02.
+**Boyut:** M.
+
+### DW-R06: Vercel provider adapter
+
+**İş:** Resmi API sözleşmesi doğrulandıktan sonra Vercel project/team deployment doğrulamasını ekle.
+
+**Kabul ölçütleri:**
+- [ ] Preview/production target, project/team scope, deployment state ve full commit SHA ayrı kanıttır.
+- [ ] Bilinmeyen API state ve eksik commit PASS olmaz.
+- [ ] Minimum token erişimi ve secret kullanımı dokümante edilir.
+
+**Doğrulama:** Contract fixture’ları, provider E2E için ayrı opt-in staging workflow.
+**Bağımlılık:** DW-R05.
+**Boyut:** L.
+
+### DW-R07: İkinci provider seçimi ve adapter
+
+**İş:** Gerçek kullanıcı talebine göre Railway veya Render’dan birini seç; iki provider’ı aynı anda başlatma.
+
+**Kabul ölçütleri:**
+- [ ] Seçim API kanıtı, deployment kimliği ve kullanıcı talebiyle ADR’de gerekçelendirilir.
+- [ ] Provider status semantiği common state’e varsayım yapmadan eşlenir.
+- [ ] Adapter ortak contract suite’i ve secret redaction testlerini geçirir.
+
+**Doğrulama:** Fixture bazlı bütün state’ler ve dedicated staging E2E.
+**Bağımlılık:** DW-R05, en az bir gerçek kullanıcı talebi.
+**Boyut:** L.
+
+**Checkpoint R2:** En az iki provider ortak karar/rapor sözleşmesini kullanır; provider-specific sınırlar consumer dokümanında görünür.
+
+### DW-R08: Runtime ve provider image digest eşleştirme
+
+**İş:** Beklenen OCI digest, provider deployment digest’i ve opsiyonel runtime build marker’ını ayrı kontrollerle ilişkilendir.
+
+**Kabul ölçütleri:**
+- [ ] Tag eşitliği immutable digest eşitliği sayılmaz.
+- [ ] Digest alanı sunmayan provider UNSUPPORTED bildirir; required policy PASS vermez.
+- [ ] Kaynak SHA, image digest ve runtime marker çelişkisi PASS olamaz.
+
+**Doğrulama:** Mismatch, missing, unsupported ve positive digest fixtures.
+**Bağımlılık:** DW-R01, DW-R05.
+**Boyut:** M.
+
+### DW-R09: GitHub artifact attestation verifier (opt-in)
+
+**İş:** GitHub artifact provenance signature/identity/subject doğrulamasını ayrı supply-chain check olarak ekle.
+
+**Kabul ölçütleri:**
+- [ ] Repository, workflow identity, commit, subject digest ve trust policy kontrol edilir.
+- [ ] Attestation build provenance’ı kanıtlar; production runtime state olarak sunulmaz.
+- [ ] Varsayılan optional davranış ve required policy kullanımı dokümante edilir.
+
+**Doğrulama:** Trusted positive, wrong repo/workflow/digest, absent attestation ve invalid verification testleri.
+**Bağımlılık:** DW-R08 ve ayrı threat-model ADR.
+**Boyut:** L.
+
+### DW-R10: npm OIDC release ve provenance
+
+**İş:** İlk package bootstrap’i tamamlandıktan sonra tag bazlı npm Trusted Publishing workflow’u ve doğrulama rehberini ekle.
+
+**Kabul ölçütleri:**
+- [ ] Release workflow yalnızca protected tag/environment ile çalışır, minimum OIDC izinlerini alır.
+- [ ] Uzun ömürlü npm publish token kullanılmaz; provenance otomatik oluşur.
+- [ ] Paketin registry kurulumu ve provenance doğrulaması release gate’inden geçer.
+
+**Doğrulama:** Test/staged package veya kontrollü public prerelease; registry version, tarball contents ve provenance kontrolü.
+**Bağımlılık:** npm package hesabında Trusted Publisher bootstrap ayarı ve release approval.
+**Boyut:** M.
+
+### DW-R11: Consumer demos, governance ve v1 release gate
+
+**İş:** Monorepo örneği, GitHub dışı CI örneği, support/security politikaları ve v1 API kararlılık kontrolünü hazırla.
+
+**Kabul ölçütleri:**
+- [ ] CLI, Node Action ve GitHub dışı CI örneği clean consumer’da çalışır.
+- [ ] Security response, support matrix, semver ve schema migration policy yayınlanır.
+- [ ] v1.0 yalnızca en az iki provider, P0 security, consumer ve release gate’leri geçtiğinde aday olur.
+
+**Doğrulama:** CI matrix, consumer smoke, staging positive/negative controls ve release checklist.
+**Bağımlılık:** DW-R04, DW-R06, DW-R07, DW-R10.
+**Boyut:** L.

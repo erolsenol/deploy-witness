@@ -12,6 +12,7 @@ export interface RunVerificationOptions {
   readonly config: VerificationConfig;
   readonly token: string;
   readonly expectedSha: string;
+  readonly startedAfter?: string;
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -41,11 +42,19 @@ export async function runVerification(
   options: RunVerificationOptions,
 ): Promise<VerificationReport> {
   const { config } = options;
+  const startedAfter = options.startedAfter ?? config.deployment.startedAfter;
+  if (
+    startedAfter !== undefined &&
+    !Number.isFinite(Date.parse(startedAfter))
+  ) {
+    throw new Error("STARTED_AFTER_INVALID");
+  }
   const providerChecks = await verifyCoolifyDeployment({
     baseUrl: config.coolify.baseUrl,
     resourceUuid: config.coolify.resourceUuid,
     token: options.token,
     expectedSha: options.expectedSha,
+    ...(startedAfter ? { startedAfter } : {}),
     timeoutSeconds: config.deployment.timeoutSeconds,
     pollIntervalSeconds: config.deployment.pollIntervalSeconds,
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
@@ -57,7 +66,7 @@ export async function runVerification(
         result.id === "provider.coolify-api" ||
         result.id.startsWith("deployment."),
     )
-    .every((result) => result.status === "PASS");
+    .every((result) => !result.required || result.status === "PASS");
 
   const runtimeChecks = deploymentVerified
     ? await Promise.all(

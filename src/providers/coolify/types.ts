@@ -8,8 +8,8 @@ export const CoolifyDeploymentSchema = z
     commit: z.string().optional(),
     git_commit_sha: z.string().optional(),
     status: z.string().optional(),
-    created_at: z.string().optional(),
-    updated_at: z.string().optional(),
+    created_at: z.string().datetime({ offset: true }).optional(),
+    updated_at: z.string().datetime({ offset: true }).optional(),
   })
   .passthrough();
 
@@ -24,7 +24,7 @@ export function deploymentSha(
 }
 
 export function deploymentTimestamp(deployment: CoolifyDeployment): number {
-  const value = deployment.created_at ?? deployment.updated_at;
+  const value = deployment.created_at;
   if (!value) return Number.NEGATIVE_INFINITY;
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
@@ -33,7 +33,17 @@ export function deploymentTimestamp(deployment: CoolifyDeployment): number {
 export function newestDeployment(
   deployments: readonly CoolifyDeployment[],
 ): CoolifyDeployment | undefined {
-  return [...deployments].sort(
-    (left, right) => deploymentTimestamp(right) - deploymentTimestamp(left),
-  )[0];
+  if (
+    deployments.length === 0 ||
+    deployments.some(
+      (deployment) => !Number.isFinite(deploymentTimestamp(deployment)),
+    )
+  ) {
+    return undefined;
+  }
+  const newestTimestamp = Math.max(...deployments.map(deploymentTimestamp));
+  const newest = deployments.filter(
+    (deployment) => deploymentTimestamp(deployment) === newestTimestamp,
+  );
+  return newest.length === 1 ? newest[0] : undefined;
 }

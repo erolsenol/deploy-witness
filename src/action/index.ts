@@ -14,7 +14,14 @@ async function main(): Promise<void> {
     process.env.GITHUB_SHA;
   if (!expectedSha || !/^[a-f0-9]{40,64}$/i.test(expectedSha))
     throw new Error("Expected a full commit SHA.");
-  const report = await runVerification({ config, token, expectedSha });
+  const startedAfter =
+    core.getInput("started-after") || config.deployment.startedAfter;
+  const report = await runVerification({
+    config,
+    token,
+    expectedSha,
+    ...(startedAfter ? { startedAfter } : {}),
+  });
   const reportPath =
     core.getInput("report-path") || "deploy-witness-report.json";
   await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, {

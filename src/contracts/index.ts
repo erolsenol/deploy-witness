@@ -55,6 +55,7 @@ const HttpProbeSchema = z
     name: z.string().min(1).max(64),
     url: z.string().url(),
     required: z.boolean().default(true),
+    allowLocalHttp: z.boolean().default(false),
     expectedStatus: z.number().int().min(100).max(599).default(200),
     timeoutMs: z.number().int().min(250).max(30_000).default(5_000),
     expectedHeader: z
@@ -97,6 +98,7 @@ export const VerificationConfigSchema = z
           .string()
           .regex(/^[a-f0-9]{40,64}$/i)
           .optional(),
+        startedAfter: z.string().datetime({ offset: true }).optional(),
         timeoutSeconds: z.number().int().min(10).max(1800).default(600),
         pollIntervalSeconds: z.number().int().min(1).max(60).default(5),
       })

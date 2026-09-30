@@ -4,6 +4,7 @@ import { writeFile } from "node:fs/promises";
 import { Command } from "commander";
 import { ConfigLoadError, loadConfig } from "./config/load.js";
 import { runVerification } from "./core/verify.js";
+import { renderJUnit } from "./reporters/junit.js";
 
 const program = new Command()
   .name("deploy-witness")
@@ -57,12 +58,19 @@ program
   .description("Verify a deployment and configured runtime probes.")
   .option("-c, --config <path>", "configuration file", "deploy-witness.yml")
   .option("--expected-sha <sha>", "expected full commit SHA")
+  .option(
+    "--started-after <timestamp>",
+    "deployment-run boundary timestamp (ISO 8601)",
+  )
   .option("--report <path>", "write JSON evidence report")
+  .option("--junit <path>", "write JUnit XML check results")
   .action(
     async (options: {
       config: string;
       expectedSha?: string;
+      startedAfter?: string;
       report?: string;
+      junit?: string;
     }) => {
       try {
         const config = await loadConfig(options.config);
@@ -85,13 +93,25 @@ program
           process.exitCode = 2;
           return;
         }
-        const report = await runVerification({ config, token, expectedSha });
+        const report = await runVerification({
+          config,
+          token,
+          expectedSha,
+          ...(options.startedAfter
+            ? { startedAfter: options.startedAfter }
+            : {}),
+        });
         if (options.report)
           await writeFile(
             options.report,
             `${JSON.stringify(report, null, 2)}\n`,
             { encoding: "utf8", mode: 0o600 },
           );
+        if (options.junit)
+          await writeFile(options.junit, renderJUnit(report), {
+            encoding: "utf8",
+            mode: 0o600,
+          });
         for (const check of report.checks)
           console.log(
             `${check.status.padEnd(11)} ${check.id} — ${check.summary}`,
@@ -100,6 +120,16 @@ program
         process.exitCode =
           report.decision === "PASS" ? 0 : report.decision === "FAIL" ? 1 : 3;
       } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "STARTED_AFTER_INVALID"
+        ) {
+          console.error(
+            "STARTED_AFTER_INVALID: Provide a valid ISO 8601 timestamp with a timezone.",
+          );
+          process.exitCode = 2;
+          return;
+        }
         console.error(
           error instanceof ConfigLoadError
             ? `${error.code}: ${error.message}`

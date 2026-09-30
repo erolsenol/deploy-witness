@@ -4,13 +4,28 @@ import { CoolifyDeploymentListSchema } from "./types.js";
 export class CoolifyApiError extends Error {
   readonly code: string;
   readonly status: number | undefined;
+  readonly retryAfterMs: number | undefined;
 
-  constructor(code: string, status?: number) {
+  constructor(code: string, status?: number, retryAfterMs?: number) {
     super(code);
     this.name = "CoolifyApiError";
     this.code = code;
     this.status = status;
+    this.retryAfterMs = retryAfterMs;
   }
+}
+
+export function parseRetryAfter(
+  value: string | null,
+  nowMs = Date.now(),
+): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value.trim());
+  if (Number.isFinite(seconds) && seconds >= 0)
+    return Math.ceil(seconds * 1000);
+  const retryAt = Date.parse(value);
+  if (Number.isNaN(retryAt)) return undefined;
+  return Math.max(0, retryAt - nowMs);
 }
 
 export interface CoolifyClientOptions {
@@ -62,6 +77,7 @@ export class CoolifyClient {
   async listApplicationDeployments(
     skip = 0,
     take = 20,
+    requestTimeoutMs = this.#timeoutMs,
   ): Promise<readonly CoolifyDeployment[]> {
     const url = new URL(this.#baseUrl);
     const prefix = url.pathname.replace(/\/$/, "");
@@ -77,7 +93,9 @@ export class CoolifyClient {
           accept: "application/json",
           authorization: `Bearer ${this.#token}`,
         },
-        signal: AbortSignal.timeout(this.#timeoutMs),
+        signal: AbortSignal.timeout(
+          Math.max(1, Math.min(requestTimeoutMs, this.#timeoutMs)),
+        ),
         redirect: "error",
       });
     } catch {
@@ -89,9 +107,21 @@ export class CoolifyClient {
     if (response.status === 403)
       throw new CoolifyApiError("COOLIFY_FORBIDDEN", 403);
     if (response.status === 429)
-      throw new CoolifyApiError("COOLIFY_RATE_LIMITED", 429);
+      throw new CoolifyApiError(
+        "COOLIFY_RATE_LIMITED",
+        429,
+        parseRetryAfter(response.headers.get("retry-after")),
+      );
+    if (response.status === 408)
+      throw new CoolifyApiError("COOLIFY_REQUEST_TIMEOUT", 408);
     if (!response.ok)
-      throw new CoolifyApiError("COOLIFY_HTTP_ERROR", response.status);
+      throw new CoolifyApiError(
+        "COOLIFY_HTTP_ERROR",
+        response.status,
+        response.status >= 500
+          ? parseRetryAfter(response.headers.get("retry-after"))
+          : undefined,
+      );
 
     let body: unknown;
     try {

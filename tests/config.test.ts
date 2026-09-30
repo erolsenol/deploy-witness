@@ -30,6 +30,15 @@ describe("configuration loading", () => {
     expect(config.probes).toEqual([]);
   });
 
+  it("accepts an ISO run-start boundary for deployment correlation", async () => {
+    const config = await loadConfig(
+      await configFile(
+        `version: 1\nprovider: coolify\ncoolify:\n  baseUrl: https://coolify.example.test\n  resourceUuid: app-1\ndeployment:\n  startedAfter: 2026-09-30T08:00:00Z\n`,
+      ),
+    );
+    expect(config.deployment.startedAfter).toBe("2026-09-30T08:00:00Z");
+  });
+
   it("rejects unknown credential fields without echoing their value", async () => {
     const path = await configFile(
       `version: 1\nprovider: coolify\ncoolify:\n  baseUrl: https://coolify.example.test\n  resourceUuid: app-1\ndeployment:\n  token: super-secret-value\n`,

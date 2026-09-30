@@ -1,26 +1,88 @@
+import type { LookupAddress } from "node:dns";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { isIP, type LookupFunction } from "node:net";
+import { Readable } from "node:stream";
 import type { CheckResult, HttpProbeConfig } from "../contracts/index.js";
+import {
+  type ProbeLookup,
+  ProbeTargetError,
+  resolveProbeTarget,
+} from "./target.js";
 
 export interface HttpProbeOptions {
   readonly fetchImpl?: typeof fetch;
+  readonly lookupImpl?: ProbeLookup;
   readonly maxBodyBytes?: number;
 }
 
-function localHttpAllowed(url: URL): boolean {
-  return (
-    url.protocol === "https:" ||
-    (url.protocol === "http:" &&
-      ["localhost", "127.0.0.1", "::1"].includes(url.hostname))
-  );
-}
-
-function safeUrl(raw: string): URL | undefined {
+function safeUrl(raw: string, allowLocalHttp: boolean): URL | undefined {
   try {
     const url = new URL(raw);
-    if (!localHttpAllowed(url) || url.username || url.password || url.hash)
+    const safeProtocol =
+      url.protocol === "https:" || (url.protocol === "http:" && allowLocalHttp);
+    if (!safeProtocol || url.username || url.password || url.hash)
       return undefined;
     return url;
   } catch {
     return undefined;
+  }
+}
+
+async function pinnedHttpRequest(
+  url: URL,
+  address: LookupAddress,
+  timeoutMs: number,
+): Promise<Response> {
+  const hostname = url.hostname.replace(/^\[|\]$/g, "");
+  const pinnedLookup: LookupFunction = (
+    _requestedHostname,
+    lookupOptions,
+    callback,
+  ) => {
+    if (lookupOptions.all) callback(null, [address]);
+    else callback(null, address.address, address.family);
+  };
+  const requestOptions = {
+    method: "GET",
+    headers: {
+      accept: "application/json, text/plain;q=0.9, */*;q=0.1",
+      "accept-encoding": "identity",
+    },
+    lookup: pinnedLookup,
+    agent: false,
+    signal: AbortSignal.timeout(timeoutMs),
+    ...(isIP(hostname) === 0 ? { servername: hostname } : {}),
+  };
+  const response = await new Promise<import("node:http").IncomingMessage>(
+    (resolve, reject) => {
+      const request = url.protocol === "https:" ? httpsRequest : httpRequest;
+      const outgoing = request(url, requestOptions, resolve);
+      outgoing.once("error", reject);
+      outgoing.end();
+    },
+  );
+
+  const headers = new Headers();
+  for (let index = 0; index < response.rawHeaders.length; index += 2) {
+    const name = response.rawHeaders[index];
+    const value = response.rawHeaders[index + 1];
+    if (name !== undefined && value !== undefined) headers.append(name, value);
+  }
+  const status = response.statusCode ?? 502;
+  const body =
+    status === 204 || status === 205 || status === 304
+      ? null
+      : (Readable.toWeb(response) as ReadableStream<Uint8Array>);
+  if (!body) response.destroy();
+  return new Response(body, { status, headers });
+}
+
+async function discardBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // The result body is intentionally discarded after status-only checks.
   }
 }
 
@@ -75,12 +137,12 @@ export async function verifyHttpProbe(
 ): Promise<CheckResult> {
   const started = Date.now();
   const observedAt = new Date(started).toISOString();
-  const url = safeUrl(probe.url);
+  const url = safeUrl(probe.url, probe.allowLocalHttp);
   if (!url) {
     return checkResult(
       probe,
       "FAIL",
-      "Probe URL must use HTTPS; HTTP is allowed only for localhost.",
+      "Probe URL must use HTTPS; localhost HTTP requires allowLocalHttp: true.",
       observedAt,
       0,
       [],
@@ -90,14 +152,57 @@ export async function verifyHttpProbe(
 
   const fetchImpl = options.fetchImpl ?? fetch;
   const maxBodyBytes = options.maxBodyBytes ?? 256 * 1024;
+  let addresses: readonly LookupAddress[];
+  try {
+    addresses = await resolveProbeTarget(
+      url,
+      probe.allowLocalHttp,
+      options.lookupImpl,
+      probe.timeoutMs - (Date.now() - started),
+    );
+  } catch (error) {
+    const failureCode =
+      error instanceof ProbeTargetError ? error.code : "HTTP_DNS_LOOKUP_FAILED";
+    return checkResult(
+      probe,
+      "FAIL",
+      failureCode === "HTTP_DNS_LOOKUP_FAILED"
+        ? "The endpoint hostname could not be resolved safely."
+        : "The endpoint must resolve only to public addresses; local HTTP requires explicit opt-in.",
+      observedAt,
+      Date.now() - started,
+      [],
+      failureCode,
+    );
+  }
+
+  const remainingTimeoutMs = probe.timeoutMs - (Date.now() - started);
+  if (remainingTimeoutMs <= 0) {
+    return checkResult(
+      probe,
+      "FAIL",
+      "The endpoint hostname lookup exceeded the probe deadline.",
+      observedAt,
+      Date.now() - started,
+      [],
+      "HTTP_DNS_LOOKUP_FAILED",
+    );
+  }
+
   let response: Response;
   try {
-    response = await fetchImpl(url, {
-      method: "GET",
-      headers: { accept: "application/json, text/plain;q=0.9, */*;q=0.1" },
-      signal: AbortSignal.timeout(probe.timeoutMs),
-      redirect: "manual",
-    });
+    response = options.fetchImpl
+      ? await fetchImpl(url, {
+          method: "GET",
+          headers: { accept: "application/json, text/plain;q=0.9, */*;q=0.1" },
+          signal: AbortSignal.timeout(remainingTimeoutMs),
+          redirect: "manual",
+        })
+      : await pinnedHttpRequest(
+          url,
+          addresses[0] as LookupAddress,
+          remainingTimeoutMs,
+        );
   } catch {
     return checkResult(
       probe,
@@ -111,6 +216,7 @@ export async function verifyHttpProbe(
   }
 
   if (response.status >= 300 && response.status < 400) {
+    await discardBody(response);
     return checkResult(
       probe,
       "FAIL",
@@ -159,6 +265,7 @@ export async function verifyHttpProbe(
   if (probe.expectedJson) {
     const declaredLength = Number(response.headers.get("content-length") ?? 0);
     if (declaredLength > maxBodyBytes) {
+      await discardBody(response);
       problems.push("Response body exceeds the configured safety limit");
     } else {
       let bodyText: string;
@@ -192,9 +299,20 @@ export async function verifyHttpProbe(
           observed: isScalar && matches,
         });
         if (!matches) problems.push("Expected JSON marker did not match");
+      } else {
+        evidence.push({
+          source: "http",
+          observedAt,
+          field: `json:${probe.expectedJson.path}:matches`,
+          expected: true,
+          observed: false,
+        });
+        problems.push("Response body was empty");
       }
     }
   }
+
+  if (!probe.expectedJson) await discardBody(response);
 
   const status: CheckResult["status"] = problems.length === 0 ? "PASS" : "FAIL";
   return checkResult(

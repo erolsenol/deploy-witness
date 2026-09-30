@@ -12,6 +12,9 @@ inputs:
   expected-sha:
     description: Expected full commit SHA; defaults to config or GITHUB_SHA.
     required: false
+  started-after:
+    description: ISO timestamp captured before deployment; older deployments fail freshness correlation.
+    required: false
   report-path:
     description: JSON evidence output path.
     required: false

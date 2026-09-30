@@ -11,6 +11,7 @@ DeployWitness verifies; it does not deploy, roll back, run migrations, or change
 - The latest Coolify deployment belongs to the configured application.
 - The provider reports a successful terminal state.
 - The deployment commit exactly matches the expected full Git SHA.
+- If `started-after` is provided, the Coolify deployment must have been created after that CI run boundary; without it, the report warns that it cannot correlate the deployment to the current run.
 - Configured health endpoints and optional version markers respond as expected.
 - Every check is reported separately, with missing or unknown evidence kept visible.
 
@@ -26,7 +27,7 @@ Requirements: Node.js 22 or newer.
     npm run build
     node dist/cli.js init
     node dist/cli.js config validate
-    node dist/cli.js verify --expected-sha "$GITHUB_SHA"
+    node dist/cli.js verify --expected-sha "$GITHUB_SHA" --report deploy-witness-report.json --junit deploy-witness.xml
 
 Set `COOLIFY_API_TOKEN` in the environment from your secret manager before running `verify`. The GitHub Action and source repository are public. npm registry publication is not available yet; use the source checkout for the CLI or pin the Action to a reviewed commit SHA.
 
@@ -34,20 +35,31 @@ Set `COOLIFY_API_TOKEN` in the environment from your secret manager before runni
 
 The Action runs after your deploy step. Store the read-only Coolify API token as a GitHub Actions secret and provide it through the Action input; never put the token in the config file.
 
+    # Capture the boundary immediately before your deployment step, then run
+    # the deployment step, and place DeployWitness after it.
+    - name: Mark deployment start
+      id: deploy-witness-boundary
+      shell: bash
+      run: echo "timestamp=$(node -p 'new Date().toISOString()')" >> "$GITHUB_OUTPUT"
+
     - name: Verify deployment
       uses: erolsenol/deploy-witness@37467fa35ab12547c4037710fd566066a70cd2a8
       with:
         config: deploy-witness.yml
         coolify-token: ${{ secrets.COOLIFY_READ_ONLY_TOKEN }}
         expected-sha: ${{ github.sha }}
+        started-after: ${{ steps.deploy-witness-boundary.outputs.timestamp }}
 
-Create the configuration with `npx deploy-witness init`, then set the Coolify URL, application UUID, timeout and probes in `deploy-witness.yml`. Run this step only in a trusted workflow that is allowed to access the Coolify token. Do not pass deployment secrets to untrusted fork pull requests.
+Create the configuration with `node dist/cli.js init`, then set the Coolify URL, application UUID, timeout and probes in `deploy-witness.yml`. Run this step only in a trusted workflow that is allowed to access the Coolify token. Do not pass deployment secrets to untrusted fork pull requests.
 
 ## Security and evidence boundaries
 
 - Provider access is read-only.
 - Coolify tokens are masked in GitHub Actions and are never written into the JSON report.
-- HTTP probe redirects are not followed; credentials are never sent to probe URLs.
+- HTTP probe redirects are not followed; the Coolify token is never sent to probe URLs.
+- Probe DNS answers are checked and connections are pinned to a validated address; private and special-use ranges are rejected.
+- Localhost HTTP is disabled unless a probe explicitly sets `allowLocalHttp: true`.
+- CLI can emit JUnit XML with `--junit <path>` for CI test-report ingestion.
 - A provider status or response field DeployWitness does not recognize is reported as unknown, not success.
 - Reports are diagnostic evidence, not a cryptographic attestation or proof that the provider itself is trustworthy.
 

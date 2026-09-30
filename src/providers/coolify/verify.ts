@@ -1,18 +1,24 @@
 import type { CheckResult } from "../../contracts/index.js";
 import { CoolifyApiError, CoolifyClient } from "./client.js";
 import type { CoolifyDeployment } from "./types.js";
-import { deploymentSha, newestDeployment } from "./types.js";
+import {
+  deploymentSha,
+  deploymentTimestamp,
+  newestDeployment,
+} from "./types.js";
 
 export interface VerifyCoolifyOptions {
   readonly baseUrl: string;
   readonly resourceUuid: string;
   readonly token: string;
   readonly expectedSha: string;
+  readonly startedAfter?: string;
   readonly timeoutSeconds: number;
   readonly pollIntervalSeconds: number;
   readonly fetchImpl?: typeof fetch;
   readonly now?: () => number;
   readonly sleep?: (milliseconds: number) => Promise<void>;
+  readonly random?: () => number;
 }
 
 type NormalizedStatus = "pending" | "success" | "failure" | "unknown";
@@ -43,11 +49,12 @@ function check(
   summary: string,
   evidence: CheckResult["evidence"],
   failureCode?: string,
+  required = true,
 ): CheckResult {
   return {
     id,
     category: id.startsWith("provider.") ? "provider" : "deployment",
-    required: true,
+    required,
     status,
     summary,
     durationMs: 0,
@@ -61,31 +68,35 @@ function deploymentChecks(
   expectedSha: string,
   observedAt: string,
   noDeploymentExpired: boolean,
+  unorderableDeploymentFound: boolean,
+  minimumCreatedAt?: number,
 ): readonly CheckResult[] {
   if (!deployment) {
-    const summary = noDeploymentExpired
-      ? "No Coolify deployment was found before the verification deadline."
-      : "Waiting for a Coolify deployment record.";
+    const summary = unorderableDeploymentFound
+      ? "Coolify returned records that could not be ordered confidently because a creation timestamp is missing or newest timestamps are tied."
+      : noDeploymentExpired
+        ? "No Coolify deployment was found before the verification deadline."
+        : "Waiting for a Coolify deployment record.";
+    const failureCode = unorderableDeploymentFound
+      ? "DEPLOYMENT_ORDER_UNCERTAIN"
+      : "DEPLOYMENT_NOT_FOUND";
     return [
-      check(
-        "deployment.status",
-        "UNKNOWN",
-        summary,
-        [],
-        "DEPLOYMENT_NOT_FOUND",
-      ),
+      check("deployment.status", "UNKNOWN", summary, [], failureCode),
       check(
         "deployment.commit",
         "UNKNOWN",
         "No deployment commit is available to compare.",
         [],
-        "DEPLOYMENT_COMMIT_MISSING",
+        unorderableDeploymentFound
+          ? "DEPLOYMENT_ORDER_UNCERTAIN"
+          : "DEPLOYMENT_COMMIT_MISSING",
       ),
     ];
   }
 
   const rawStatus = deployment.status;
   const sha = deploymentSha(deployment);
+  const createdAt = deploymentTimestamp(deployment);
   const providerStatus = normalizeStatus(rawStatus);
   const statusEvidence = rawStatus
     ? [{ source: "coolify", observedAt, field: "status", observed: rawStatus }]
@@ -157,18 +168,80 @@ function deploymentChecks(
           "DEPLOYMENT_SHA_MISMATCH",
         );
 
-  return [statusCheck, commitCheck];
+  const freshnessCheck =
+    minimumCreatedAt === undefined
+      ? check(
+          "deployment.freshness",
+          "WARN",
+          "No run-start boundary was supplied; this deployment cannot be correlated to the current CI run.",
+          [
+            {
+              source: "coolify",
+              observedAt,
+              field: "createdAt",
+              observed: deployment.created_at ?? null,
+            },
+          ],
+          "DEPLOYMENT_RUN_CORRELATION_UNAVAILABLE",
+          false,
+        )
+      : createdAt <= minimumCreatedAt
+        ? check(
+            "deployment.freshness",
+            "FAIL",
+            "The latest deployment was not created strictly after the supplied run-start boundary.",
+            [
+              {
+                source: "coolify",
+                observedAt,
+                field: "createdAt",
+                expected: new Date(minimumCreatedAt).toISOString(),
+                observed: deployment.created_at ?? null,
+              },
+            ],
+            "DEPLOYMENT_STALE",
+          )
+        : check(
+            "deployment.freshness",
+            "PASS",
+            "The latest deployment was created after the supplied run-start boundary.",
+            [
+              {
+                source: "coolify",
+                observedAt,
+                field: "createdAt",
+                expected: new Date(minimumCreatedAt).toISOString(),
+                observed: deployment.created_at ?? null,
+              },
+            ],
+          );
+
+  return [statusCheck, commitCheck, freshnessCheck];
 }
 
 const defaultSleep = (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const MAX_API_ATTEMPTS = 1800;
+const MAX_BACKOFF_MS = 30_000;
+
+function transientBackoffMs(failures: number, random: () => number): number {
+  const ceiling = Math.min(
+    1_000 * 2 ** Math.min(failures - 1, 30),
+    MAX_BACKOFF_MS,
+  );
+  return Math.floor(ceiling * (0.5 + random() * 0.5));
+}
 
 function isTransient(error: unknown): boolean {
   return (
     error instanceof CoolifyApiError &&
     (error.code === "COOLIFY_NETWORK_ERROR" ||
       error.code === "COOLIFY_RATE_LIMITED" ||
-      error.code === "COOLIFY_HTTP_ERROR")
+      error.code === "COOLIFY_REQUEST_TIMEOUT" ||
+      (error.code === "COOLIFY_HTTP_ERROR" &&
+        error.status !== undefined &&
+        error.status >= 500))
   );
 }
 
@@ -221,6 +294,22 @@ export async function verifyCoolifyDeployment(
 ): Promise<readonly CheckResult[]> {
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? defaultSleep;
+  const random = options.random ?? Math.random;
+  const minimumCreatedAt =
+    options.startedAfter === undefined
+      ? undefined
+      : Date.parse(options.startedAfter);
+  if (minimumCreatedAt !== undefined && !Number.isFinite(minimumCreatedAt)) {
+    return [
+      check(
+        "deployment.freshness",
+        "FAIL",
+        "The supplied run-start boundary is not a valid timestamp.",
+        [],
+        "DEPLOYMENT_STARTED_AFTER_INVALID",
+      ),
+    ];
+  }
   const deadline = now() + options.timeoutSeconds * 1000;
   let client: CoolifyClient;
 
@@ -236,15 +325,29 @@ export async function verifyCoolifyDeployment(
   }
 
   let lastDeployment: CoolifyDeployment | undefined;
+  let unorderableDeploymentFound = false;
   let apiObservedAt: string | undefined;
   let lastError: unknown;
+  let attempts = 0;
+  let consecutiveTransientFailures = 0;
 
-  while (now() < deadline) {
+  while (now() < deadline && attempts < MAX_API_ATTEMPTS) {
+    const remainingBeforeRequest = deadline - now();
+    if (remainingBeforeRequest <= 0) break;
+    attempts += 1;
     try {
-      const deployments = await client.listApplicationDeployments();
+      const deployments = await client.listApplicationDeployments(
+        0,
+        20,
+        remainingBeforeRequest,
+      );
       apiObservedAt = new Date(now()).toISOString();
       lastDeployment = newestDeployment(deployments);
+      unorderableDeploymentFound = deployments.length > 0 && !lastDeployment;
       lastError = undefined;
+      consecutiveTransientFailures = 0;
+
+      if (unorderableDeploymentFound) break;
 
       if (lastDeployment) {
         const status = normalizeStatus(lastDeployment.status);
@@ -259,11 +362,19 @@ export async function verifyCoolifyDeployment(
       lastError = error;
       if (!isTransient(error))
         return providerFailure(error, new Date(now()).toISOString());
+      consecutiveTransientFailures += 1;
     }
 
     const remaining = deadline - now();
     if (remaining <= 0) break;
-    await sleep(Math.min(options.pollIntervalSeconds * 1000, remaining));
+    const requestedDelay =
+      lastError instanceof CoolifyApiError &&
+      lastError.retryAfterMs !== undefined
+        ? lastError.retryAfterMs
+        : consecutiveTransientFailures > 0
+          ? transientBackoffMs(consecutiveTransientFailures, random)
+          : options.pollIntervalSeconds * 1000;
+    await sleep(Math.min(requestedDelay, remaining));
   }
 
   if (lastError && !apiObservedAt)
@@ -295,6 +406,8 @@ export async function verifyCoolifyDeployment(
       options.expectedSha,
       observedAt,
       now() >= deadline,
+      unorderableDeploymentFound,
+      minimumCreatedAt,
     ),
   ];
 }

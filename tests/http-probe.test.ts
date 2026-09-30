@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import type { HttpProbeConfig } from "../src/contracts/index.js";
 import { verifyHttpProbe } from "../src/probes/http.js";
@@ -6,9 +8,14 @@ const baseProbe: HttpProbeConfig = {
   name: "health",
   url: "https://app.example.test/api/version",
   required: true,
+  allowLocalHttp: false,
   expectedStatus: 200,
   timeoutMs: 2_000,
 };
+
+const publicLookup = async () => [
+  { address: "93.184.216.34", family: 4 as const },
+];
 
 describe("HTTP runtime probes", () => {
   it("checks status and a JSON deployment marker without returning the response body", async () => {
@@ -22,6 +29,7 @@ describe("HTTP runtime probes", () => {
     });
     const result = await verifyHttpProbe(probe, {
       fetchImpl: async () => response,
+      lookupImpl: publicLookup,
     });
     expect(result.status).toBe("PASS");
     expect(JSON.stringify(result)).not.toContain("do-not-report");
@@ -40,6 +48,7 @@ describe("HTTP runtime probes", () => {
           status: 302,
           headers: { location: "https://elsewhere.example.test" },
         }),
+      lookupImpl: publicLookup,
     });
     expect(result.status).toBe("FAIL");
     expect(result.failureCode).toBe("HTTP_REDIRECT_BLOCKED");
@@ -57,8 +66,85 @@ describe("HTTP runtime probes", () => {
   it("fails when the requested runtime commit marker does not match", async () => {
     const result = await verifyHttpProbe(
       { ...baseProbe, expectedJson: { path: "commit", value: "expected" } },
-      { fetchImpl: async () => Response.json({ commit: "stale" }) },
+      {
+        fetchImpl: async () => Response.json({ commit: "stale" }),
+        lookupImpl: publicLookup,
+      },
     );
     expect(result.status).toBe("FAIL");
+  });
+
+  it("rejects a hostname if any resolved address is private", async () => {
+    let requests = 0;
+    const result = await verifyHttpProbe(baseProbe, {
+      lookupImpl: async () => [
+        { address: "93.184.216.34", family: 4 },
+        { address: "10.0.0.12", family: 4 },
+      ],
+      fetchImpl: async () => {
+        requests += 1;
+        return Response.json({ ok: true });
+      },
+    });
+    expect(result.failureCode).toBe("HTTP_URL_UNSAFE");
+    expect(requests).toBe(0);
+  });
+
+  it("requires explicit opt-in for localhost HTTP", async () => {
+    const result = await verifyHttpProbe(
+      { ...baseProbe, url: "http://localhost/health", allowLocalHttp: true },
+      {
+        lookupImpl: async () => [{ address: "127.0.0.1", family: 4 }],
+        fetchImpl: async () => Response.json({ ok: true }),
+      },
+    );
+    expect(result.status).toBe("PASS");
+  });
+
+  it("does not treat an empty body as a successful JSON marker check", async () => {
+    const result = await verifyHttpProbe(
+      { ...baseProbe, expectedJson: { path: "commit", value: "expected" } },
+      {
+        fetchImpl: async () => new Response(null, { status: 204 }),
+        lookupImpl: publicLookup,
+      },
+    );
+    expect(result.status).toBe("FAIL");
+    expect(
+      result.evidence.some(
+        (item) =>
+          item.field === "json:commit:matches" && item.observed === false,
+      ),
+    ).toBe(true);
+  });
+
+  it("pins the localhost development request to the validated address", async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ commit: "expected" }));
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address() as AddressInfo;
+
+    try {
+      const result = await verifyHttpProbe(
+        {
+          ...baseProbe,
+          url: `http://localhost:${address.port}/version`,
+          allowLocalHttp: true,
+          expectedJson: { path: "commit", value: "expected" },
+        },
+        {
+          lookupImpl: async () => [{ address: "127.0.0.1", family: 4 }],
+        },
+      );
+      expect(result.status).toBe("PASS");
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
   });
 });

@@ -37400,11 +37400,11 @@ var HttpCodes;
     HttpCodes[HttpCodes["ServiceUnavailable"] = 503] = "ServiceUnavailable";
     HttpCodes[HttpCodes["GatewayTimeout"] = 504] = "GatewayTimeout";
 })(HttpCodes || (HttpCodes = {}));
-var Headers;
+var lib_Headers;
 (function (Headers) {
     Headers["Accept"] = "accept";
     Headers["ContentType"] = "content-type";
-})(Headers || (Headers = {}));
+})(lib_Headers || (lib_Headers = {}));
 var MediaTypes;
 (function (MediaTypes) {
     MediaTypes["ApplicationJson"] = "application/json";
@@ -37559,7 +37559,7 @@ class lib_HttpClient {
      */
     getJson(requestUrl_1) {
         return __awaiter(this, arguments, void 0, function* (requestUrl, additionalHeaders = {}) {
-            additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
+            additionalHeaders[lib_Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, lib_Headers.Accept, MediaTypes.ApplicationJson);
             const res = yield this.get(requestUrl, additionalHeaders);
             return this._processResponse(res, this.requestOptions);
         });
@@ -37567,8 +37567,8 @@ class lib_HttpClient {
     postJson(requestUrl_1, obj_1) {
         return __awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
             const data = JSON.stringify(obj, null, 2);
-            additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
-            additionalHeaders[Headers.ContentType] =
+            additionalHeaders[lib_Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, lib_Headers.Accept, MediaTypes.ApplicationJson);
+            additionalHeaders[lib_Headers.ContentType] =
                 this._getExistingOrDefaultContentTypeHeader(additionalHeaders, MediaTypes.ApplicationJson);
             const res = yield this.post(requestUrl, data, additionalHeaders);
             return this._processResponse(res, this.requestOptions);
@@ -37577,8 +37577,8 @@ class lib_HttpClient {
     putJson(requestUrl_1, obj_1) {
         return __awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
             const data = JSON.stringify(obj, null, 2);
-            additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
-            additionalHeaders[Headers.ContentType] =
+            additionalHeaders[lib_Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, lib_Headers.Accept, MediaTypes.ApplicationJson);
+            additionalHeaders[lib_Headers.ContentType] =
                 this._getExistingOrDefaultContentTypeHeader(additionalHeaders, MediaTypes.ApplicationJson);
             const res = yield this.put(requestUrl, data, additionalHeaders);
             return this._processResponse(res, this.requestOptions);
@@ -37587,8 +37587,8 @@ class lib_HttpClient {
     patchJson(requestUrl_1, obj_1) {
         return __awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
             const data = JSON.stringify(obj, null, 2);
-            additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
-            additionalHeaders[Headers.ContentType] =
+            additionalHeaders[lib_Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, lib_Headers.Accept, MediaTypes.ApplicationJson);
+            additionalHeaders[lib_Headers.ContentType] =
                 this._getExistingOrDefaultContentTypeHeader(additionalHeaders, MediaTypes.ApplicationJson);
             const res = yield this.patch(requestUrl, data, additionalHeaders);
             return this._processResponse(res, this.requestOptions);
@@ -37855,7 +37855,7 @@ class lib_HttpClient {
     _getExistingOrDefaultContentTypeHeader(additionalHeaders, _default) {
         let clientHeader;
         if (this.requestOptions && this.requestOptions.headers) {
-            const headerValue = lowercaseKeys(this.requestOptions.headers)[Headers.ContentType];
+            const headerValue = lowercaseKeys(this.requestOptions.headers)[lib_Headers.ContentType];
             if (headerValue) {
                 if (typeof headerValue === 'number') {
                     clientHeader = String(headerValue);
@@ -37868,7 +37868,7 @@ class lib_HttpClient {
                 }
             }
         }
-        const additionalValue = additionalHeaders[Headers.ContentType];
+        const additionalValue = additionalHeaders[lib_Headers.ContentType];
         // Return the first non-undefined value, converting numbers or arrays to strings if necessary
         if (additionalValue !== undefined) {
             if (typeof additionalValue === 'number') {
@@ -49572,6 +49572,7 @@ const HttpProbeSchema = object({
     name: schemas_string().min(1).max(64),
     url: schemas_string().url(),
     required: schemas_boolean().default(true),
+    allowLocalHttp: schemas_boolean().default(false),
     expectedStatus: schemas_number().int().min(100).max(599).default(200),
     timeoutMs: schemas_number().int().min(250).max(30_000).default(5_000),
     expectedHeader: object({ name: schemas_string().min(1), value: schemas_string() })
@@ -49603,6 +49604,7 @@ const VerificationConfigSchema = object({
         expectedSha: schemas_string()
             .regex(/^[a-f0-9]{40,64}$/i)
             .optional(),
+        startedAfter: schemas_string().datetime({ offset: true }).optional(),
         timeoutSeconds: schemas_number().int().min(10).max(1800).default(600),
         pollIntervalSeconds: schemas_number().int().min(1).max(60).default(5),
     })
@@ -49667,21 +49669,253 @@ async function loadConfig(path) {
 //# sourceMappingURL=load.js.map
 // EXTERNAL MODULE: external "node:crypto"
 var external_node_crypto_ = __nccwpck_require__(7598);
-;// CONCATENATED MODULE: ./dist/probes/http.js
-function localHttpAllowed(url) {
-    return (url.protocol === "https:" ||
-        (url.protocol === "http:" &&
-            ["localhost", "127.0.0.1", "::1"].includes(url.hostname)));
+// EXTERNAL MODULE: external "node:http"
+var external_node_http_ = __nccwpck_require__(7067);
+;// CONCATENATED MODULE: external "node:https"
+const external_node_https_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:https");
+// EXTERNAL MODULE: external "node:net"
+var external_node_net_ = __nccwpck_require__(7030);
+// EXTERNAL MODULE: external "node:stream"
+var external_node_stream_ = __nccwpck_require__(7075);
+;// CONCATENATED MODULE: external "node:dns/promises"
+const external_node_dns_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:dns/promises");
+;// CONCATENATED MODULE: ./dist/probes/target.js
+
+
+class ProbeTargetError extends Error {
+    code;
+    constructor(code) {
+        super(code);
+        this.code = code;
+        this.name = "ProbeTargetError";
+    }
 }
-function safeUrl(raw) {
+const resolveDns = (hostname) => (0,external_node_dns_promises_namespaceObject.lookup)(hostname, { all: true, verbatim: true });
+async function resolveWithTimeout(hostname, lookup, timeoutMs) {
+    let timer;
+    try {
+        return await Promise.race([
+            lookup(hostname),
+            new Promise((_resolve, reject) => {
+                timer = setTimeout(() => reject(new ProbeTargetError("HTTP_DNS_LOOKUP_FAILED")), timeoutMs);
+            }),
+        ]);
+    }
+    finally {
+        if (timer)
+            clearTimeout(timer);
+    }
+}
+function inIpv4Cidr(address, network, prefix) {
+    const valueParts = address.split(".").map(Number);
+    const networkParts = network.split(".").map(Number);
+    if (valueParts.length !== 4 || networkParts.length !== 4)
+        return false;
+    const value = valueParts.reduce((result, part) => (result << 8n) | BigInt(part), 0n);
+    const base = networkParts.reduce((result, part) => (result << 8n) | BigInt(part), 0n);
+    const mask = (0xffffffffn << BigInt(32 - prefix)) & 0xffffffffn;
+    return (value & mask) === (base & mask);
+}
+const NON_PUBLIC_IPV4_RANGES = [
+    ["0.0.0.0", 8],
+    ["10.0.0.0", 8],
+    ["100.64.0.0", 10],
+    ["127.0.0.0", 8],
+    ["169.254.0.0", 16],
+    ["172.16.0.0", 12],
+    ["192.0.0.0", 24],
+    ["192.0.2.0", 24],
+    ["192.88.99.0", 24],
+    ["192.168.0.0", 16],
+    ["198.18.0.0", 15],
+    ["198.51.100.0", 24],
+    ["203.0.113.0", 24],
+    ["224.0.0.0", 4],
+    ["240.0.0.0", 4],
+];
+function isPublicIpv4(address) {
+    return ((0,external_node_net_.isIP)(address) === 4 &&
+        !NON_PUBLIC_IPV4_RANGES.some(([network, prefix]) => inIpv4Cidr(address, network, prefix)));
+}
+function ipv6Bytes(address) {
+    let normalized = address.toLowerCase();
+    if (normalized.includes("%"))
+        return undefined;
+    const lastColon = normalized.lastIndexOf(":");
+    const possibleIpv4 = normalized.slice(lastColon + 1);
+    if (possibleIpv4.includes(".")) {
+        if (!isPublicIpv4(possibleIpv4))
+            return undefined;
+        const octets = possibleIpv4.split(".").map(Number);
+        const high = ((octets[0] ?? 0) << 8) | (octets[1] ?? 0);
+        const low = ((octets[2] ?? 0) << 8) | (octets[3] ?? 0);
+        normalized = `${normalized.slice(0, lastColon + 1)}${high.toString(16)}:${low.toString(16)}`;
+    }
+    const sections = normalized.split("::");
+    if (sections.length > 2)
+        return undefined;
+    const left = sections[0] ? sections[0].split(":") : [];
+    const right = sections.length === 2 && sections[1] ? sections[1].split(":") : [];
+    const missing = 8 - left.length - right.length;
+    if ((sections.length === 1 && missing !== 0) ||
+        (sections.length === 2 && missing < 1))
+        return undefined;
+    const groups = [
+        ...left,
+        ...Array.from({ length: missing }, () => "0"),
+        ...right,
+    ];
+    if (groups.length !== 8 ||
+        groups.some((group) => !/^[a-f0-9]{1,4}$/.test(group)))
+        return undefined;
+    return groups.flatMap((group) => {
+        const value = Number.parseInt(group, 16);
+        return [value >> 8, value & 0xff];
+    });
+}
+function inIpv6Cidr(address, network, prefix) {
+    const wholeBytes = Math.floor(prefix / 8);
+    const remainingBits = prefix % 8;
+    for (let index = 0; index < wholeBytes; index += 1) {
+        if (address[index] !== network[index])
+            return false;
+    }
+    if (remainingBits === 0)
+        return true;
+    const mask = (0xff << (8 - remainingBits)) & 0xff;
+    return (((address[wholeBytes] ?? 0) & mask) === ((network[wholeBytes] ?? 0) & mask));
+}
+function bytesFor(address) {
+    return ipv6Bytes(address);
+}
+function isPublicIpv6(address) {
+    if ((0,external_node_net_.isIP)(address) !== 6)
+        return false;
+    const bytes = bytesFor(address);
+    if (!bytes)
+        return false;
+    const globalUnicast = [0x20, 0x00, ...Array.from({ length: 14 }, () => 0)];
+    const documentation = [
+        0x20,
+        0x01,
+        0x0d,
+        0xb8,
+        ...Array.from({ length: 12 }, () => 0),
+    ];
+    const teredo = [0x20, 0x01, 0x00, ...Array.from({ length: 13 }, () => 0)];
+    const sixToFour = [0x20, 0x02, ...Array.from({ length: 14 }, () => 0)];
+    const documentationV2 = [0x3f, 0xff, ...Array.from({ length: 14 }, () => 0)];
+    return (inIpv6Cidr(bytes, globalUnicast, 3) &&
+        !inIpv6Cidr(bytes, documentation, 32) &&
+        !inIpv6Cidr(bytes, teredo, 23) &&
+        !inIpv6Cidr(bytes, sixToFour, 16) &&
+        !inIpv6Cidr(bytes, documentationV2, 20));
+}
+function isPublicAddress(address) {
+    return isPublicIpv4(address) || isPublicIpv6(address);
+}
+function localAddressAllowed(url, address) {
+    if (url.protocol !== "http:")
+        return false;
+    const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    const localhostName = hostname === "localhost" || hostname.endsWith(".localhost");
+    const loopbackIp = ((0,external_node_net_.isIP)(address) === 4 && inIpv4Cidr(address, "127.0.0.0", 8)) ||
+        address.toLowerCase() === "::1";
+    return localhostName && loopbackIp;
+}
+async function resolveProbeTarget(url, allowLocalHttp = false, lookup = resolveDns, timeoutMs = 5_000) {
+    const hostname = url.hostname.replace(/^\[|\]$/g, "");
+    const family = (0,external_node_net_.isIP)(hostname);
+    let addresses;
+    if (family !== 0) {
+        addresses = [{ address: hostname, family }];
+    }
+    else {
+        try {
+            addresses = await resolveWithTimeout(hostname, lookup, timeoutMs);
+        }
+        catch {
+            throw new ProbeTargetError("HTTP_DNS_LOOKUP_FAILED");
+        }
+    }
+    if (addresses.length === 0)
+        throw new ProbeTargetError("HTTP_DNS_LOOKUP_FAILED");
+    if (url.protocol === "http:" &&
+        (!allowLocalHttp ||
+            addresses.some(({ address }) => !localAddressAllowed(url, address)))) {
+        throw new ProbeTargetError("HTTP_URL_UNSAFE");
+    }
+    if (addresses.some(({ address }) => !isPublicAddress(address) &&
+        !(allowLocalHttp && localAddressAllowed(url, address)))) {
+        throw new ProbeTargetError("HTTP_URL_UNSAFE");
+    }
+    return addresses;
+}
+//# sourceMappingURL=target.js.map
+;// CONCATENATED MODULE: ./dist/probes/http.js
+
+
+
+
+
+function safeUrl(raw, allowLocalHttp) {
     try {
         const url = new URL(raw);
-        if (!localHttpAllowed(url) || url.username || url.password || url.hash)
+        const safeProtocol = url.protocol === "https:" || (url.protocol === "http:" && allowLocalHttp);
+        if (!safeProtocol || url.username || url.password || url.hash)
             return undefined;
         return url;
     }
     catch {
         return undefined;
+    }
+}
+async function pinnedHttpRequest(url, address, timeoutMs) {
+    const hostname = url.hostname.replace(/^\[|\]$/g, "");
+    const pinnedLookup = (_requestedHostname, lookupOptions, callback) => {
+        if (lookupOptions.all)
+            callback(null, [address]);
+        else
+            callback(null, address.address, address.family);
+    };
+    const requestOptions = {
+        method: "GET",
+        headers: {
+            accept: "application/json, text/plain;q=0.9, */*;q=0.1",
+            "accept-encoding": "identity",
+        },
+        lookup: pinnedLookup,
+        agent: false,
+        signal: AbortSignal.timeout(timeoutMs),
+        ...((0,external_node_net_.isIP)(hostname) === 0 ? { servername: hostname } : {}),
+    };
+    const response = await new Promise((resolve, reject) => {
+        const request = url.protocol === "https:" ? external_node_https_namespaceObject.request : external_node_http_.request;
+        const outgoing = request(url, requestOptions, resolve);
+        outgoing.once("error", reject);
+        outgoing.end();
+    });
+    const headers = new Headers();
+    for (let index = 0; index < response.rawHeaders.length; index += 2) {
+        const name = response.rawHeaders[index];
+        const value = response.rawHeaders[index + 1];
+        if (name !== undefined && value !== undefined)
+            headers.append(name, value);
+    }
+    const status = response.statusCode ?? 502;
+    const body = status === 204 || status === 205 || status === 304
+        ? null
+        : external_node_stream_.Readable.toWeb(response);
+    if (!body)
+        response.destroy();
+    return new Response(body, { status, headers });
+}
+async function discardBody(response) {
+    try {
+        await response.body?.cancel();
+    }
+    catch {
+        // The result body is intentionally discarded after status-only checks.
     }
 }
 function pathValue(value, path) {
@@ -49720,25 +49954,42 @@ function checkResult(probe, status, summary, _observedAt, durationMs, evidence, 
 async function verifyHttpProbe(probe, options = {}) {
     const started = Date.now();
     const observedAt = new Date(started).toISOString();
-    const url = safeUrl(probe.url);
+    const url = safeUrl(probe.url, probe.allowLocalHttp);
     if (!url) {
-        return checkResult(probe, "FAIL", "Probe URL must use HTTPS; HTTP is allowed only for localhost.", observedAt, 0, [], "HTTP_URL_UNSAFE");
+        return checkResult(probe, "FAIL", "Probe URL must use HTTPS; localhost HTTP requires allowLocalHttp: true.", observedAt, 0, [], "HTTP_URL_UNSAFE");
     }
     const fetchImpl = options.fetchImpl ?? fetch;
     const maxBodyBytes = options.maxBodyBytes ?? 256 * 1024;
+    let addresses;
+    try {
+        addresses = await resolveProbeTarget(url, probe.allowLocalHttp, options.lookupImpl, probe.timeoutMs - (Date.now() - started));
+    }
+    catch (error) {
+        const failureCode = error instanceof ProbeTargetError ? error.code : "HTTP_DNS_LOOKUP_FAILED";
+        return checkResult(probe, "FAIL", failureCode === "HTTP_DNS_LOOKUP_FAILED"
+            ? "The endpoint hostname could not be resolved safely."
+            : "The endpoint must resolve only to public addresses; local HTTP requires explicit opt-in.", observedAt, Date.now() - started, [], failureCode);
+    }
+    const remainingTimeoutMs = probe.timeoutMs - (Date.now() - started);
+    if (remainingTimeoutMs <= 0) {
+        return checkResult(probe, "FAIL", "The endpoint hostname lookup exceeded the probe deadline.", observedAt, Date.now() - started, [], "HTTP_DNS_LOOKUP_FAILED");
+    }
     let response;
     try {
-        response = await fetchImpl(url, {
-            method: "GET",
-            headers: { accept: "application/json, text/plain;q=0.9, */*;q=0.1" },
-            signal: AbortSignal.timeout(probe.timeoutMs),
-            redirect: "manual",
-        });
+        response = options.fetchImpl
+            ? await fetchImpl(url, {
+                method: "GET",
+                headers: { accept: "application/json, text/plain;q=0.9, */*;q=0.1" },
+                signal: AbortSignal.timeout(remainingTimeoutMs),
+                redirect: "manual",
+            })
+            : await pinnedHttpRequest(url, addresses[0], remainingTimeoutMs);
     }
     catch {
         return checkResult(probe, "FAIL", "The endpoint could not be reached before its timeout.", observedAt, Date.now() - started, [], "HTTP_REQUEST_FAILED");
     }
     if (response.status >= 300 && response.status < 400) {
+        await discardBody(response);
         return checkResult(probe, "FAIL", "The endpoint redirected; DeployWitness does not follow redirects.", observedAt, Date.now() - started, [
             {
                 source: "http",
@@ -49777,6 +50028,7 @@ async function verifyHttpProbe(probe, options = {}) {
     if (probe.expectedJson) {
         const declaredLength = Number(response.headers.get("content-length") ?? 0);
         if (declaredLength > maxBodyBytes) {
+            await discardBody(response);
             problems.push("Response body exceeds the configured safety limit");
         }
         else {
@@ -49813,8 +50065,20 @@ async function verifyHttpProbe(probe, options = {}) {
                 if (!matches)
                     problems.push("Expected JSON marker did not match");
             }
+            else {
+                evidence.push({
+                    source: "http",
+                    observedAt,
+                    field: `json:${probe.expectedJson.path}:matches`,
+                    expected: true,
+                    observed: false,
+                });
+                problems.push("Response body was empty");
+            }
         }
     }
+    if (!probe.expectedJson)
+        await discardBody(response);
     const status = problems.length === 0 ? "PASS" : "FAIL";
     return checkResult(probe, status, problems.length === 0
         ? "HTTP endpoint and configured runtime markers matched."
@@ -49860,8 +50124,8 @@ const CoolifyDeploymentSchema = object({
     commit: schemas_string().optional(),
     git_commit_sha: schemas_string().optional(),
     status: schemas_string().optional(),
-    created_at: schemas_string().optional(),
-    updated_at: schemas_string().optional(),
+    created_at: schemas_string().datetime({ offset: true }).optional(),
+    updated_at: schemas_string().datetime({ offset: true }).optional(),
 })
     .passthrough();
 const CoolifyDeploymentListSchema = array(CoolifyDeploymentSchema);
@@ -49869,14 +50133,20 @@ function deploymentSha(deployment) {
     return deployment.git_commit_sha ?? deployment.commit;
 }
 function deploymentTimestamp(deployment) {
-    const value = deployment.created_at ?? deployment.updated_at;
+    const value = deployment.created_at;
     if (!value)
         return Number.NEGATIVE_INFINITY;
     const parsed = Date.parse(value);
     return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
 }
 function newestDeployment(deployments) {
-    return [...deployments].sort((left, right) => deploymentTimestamp(right) - deploymentTimestamp(left))[0];
+    if (deployments.length === 0 ||
+        deployments.some((deployment) => !Number.isFinite(deploymentTimestamp(deployment)))) {
+        return undefined;
+    }
+    const newestTimestamp = Math.max(...deployments.map(deploymentTimestamp));
+    const newest = deployments.filter((deployment) => deploymentTimestamp(deployment) === newestTimestamp);
+    return newest.length === 1 ? newest[0] : undefined;
 }
 //# sourceMappingURL=types.js.map
 ;// CONCATENATED MODULE: ./dist/providers/coolify/client.js
@@ -49884,12 +50154,25 @@ function newestDeployment(deployments) {
 class CoolifyApiError extends Error {
     code;
     status;
-    constructor(code, status) {
+    retryAfterMs;
+    constructor(code, status, retryAfterMs) {
         super(code);
         this.name = "CoolifyApiError";
         this.code = code;
         this.status = status;
+        this.retryAfterMs = retryAfterMs;
     }
+}
+function parseRetryAfter(value, nowMs = Date.now()) {
+    if (!value)
+        return undefined;
+    const seconds = Number(value.trim());
+    if (Number.isFinite(seconds) && seconds >= 0)
+        return Math.ceil(seconds * 1000);
+    const retryAt = Date.parse(value);
+    if (Number.isNaN(retryAt))
+        return undefined;
+    return Math.max(0, retryAt - nowMs);
 }
 function parseBaseUrl(raw) {
     let url;
@@ -49925,7 +50208,7 @@ class CoolifyClient {
         this.#fetch = options.fetchImpl ?? fetch;
         this.#timeoutMs = options.timeoutMs ?? 10_000;
     }
-    async listApplicationDeployments(skip = 0, take = 20) {
+    async listApplicationDeployments(skip = 0, take = 20, requestTimeoutMs = this.#timeoutMs) {
         const url = new URL(this.#baseUrl);
         const prefix = url.pathname.replace(/\/$/, "");
         url.pathname = `${prefix}/api/v1/deployments/applications/${encodeURIComponent(this.#resourceUuid)}`;
@@ -49939,7 +50222,7 @@ class CoolifyClient {
                     accept: "application/json",
                     authorization: `Bearer ${this.#token}`,
                 },
-                signal: AbortSignal.timeout(this.#timeoutMs),
+                signal: AbortSignal.timeout(Math.max(1, Math.min(requestTimeoutMs, this.#timeoutMs))),
                 redirect: "error",
             });
         }
@@ -49951,9 +50234,13 @@ class CoolifyClient {
         if (response.status === 403)
             throw new CoolifyApiError("COOLIFY_FORBIDDEN", 403);
         if (response.status === 429)
-            throw new CoolifyApiError("COOLIFY_RATE_LIMITED", 429);
+            throw new CoolifyApiError("COOLIFY_RATE_LIMITED", 429, parseRetryAfter(response.headers.get("retry-after")));
+        if (response.status === 408)
+            throw new CoolifyApiError("COOLIFY_REQUEST_TIMEOUT", 408);
         if (!response.ok)
-            throw new CoolifyApiError("COOLIFY_HTTP_ERROR", response.status);
+            throw new CoolifyApiError("COOLIFY_HTTP_ERROR", response.status, response.status >= 500
+                ? parseRetryAfter(response.headers.get("retry-after"))
+                : undefined);
         let body;
         try {
             body = await response.json();
@@ -49990,11 +50277,11 @@ function normalizeStatus(raw) {
             return "unknown";
     }
 }
-function verify_check(id, status, summary, evidence, failureCode) {
+function verify_check(id, status, summary, evidence, failureCode, required = true) {
     return {
         id,
         category: id.startsWith("provider.") ? "provider" : "deployment",
-        required: true,
+        required,
         status,
         summary,
         durationMs: 0,
@@ -50002,18 +50289,26 @@ function verify_check(id, status, summary, evidence, failureCode) {
         ...(failureCode ? { failureCode } : {}),
     };
 }
-function deploymentChecks(deployment, expectedSha, observedAt, noDeploymentExpired) {
+function deploymentChecks(deployment, expectedSha, observedAt, noDeploymentExpired, unorderableDeploymentFound, minimumCreatedAt) {
     if (!deployment) {
-        const summary = noDeploymentExpired
-            ? "No Coolify deployment was found before the verification deadline."
-            : "Waiting for a Coolify deployment record.";
+        const summary = unorderableDeploymentFound
+            ? "Coolify returned records that could not be ordered confidently because a creation timestamp is missing or newest timestamps are tied."
+            : noDeploymentExpired
+                ? "No Coolify deployment was found before the verification deadline."
+                : "Waiting for a Coolify deployment record.";
+        const failureCode = unorderableDeploymentFound
+            ? "DEPLOYMENT_ORDER_UNCERTAIN"
+            : "DEPLOYMENT_NOT_FOUND";
         return [
-            verify_check("deployment.status", "UNKNOWN", summary, [], "DEPLOYMENT_NOT_FOUND"),
-            verify_check("deployment.commit", "UNKNOWN", "No deployment commit is available to compare.", [], "DEPLOYMENT_COMMIT_MISSING"),
+            verify_check("deployment.status", "UNKNOWN", summary, [], failureCode),
+            verify_check("deployment.commit", "UNKNOWN", "No deployment commit is available to compare.", [], unorderableDeploymentFound
+                ? "DEPLOYMENT_ORDER_UNCERTAIN"
+                : "DEPLOYMENT_COMMIT_MISSING"),
         ];
     }
     const rawStatus = deployment.status;
     const sha = deploymentSha(deployment);
+    const createdAt = deploymentTimestamp(deployment);
     const providerStatus = normalizeStatus(rawStatus);
     const statusEvidence = rawStatus
         ? [{ source: "coolify", observedAt, field: "status", observed: rawStatus }]
@@ -50041,14 +50336,51 @@ function deploymentChecks(deployment, expectedSha, observedAt, noDeploymentExpir
         : sha.toLowerCase() === expectedSha.toLowerCase()
             ? verify_check("deployment.commit", "PASS", "The latest deployment commit exactly matches the expected SHA.", commitEvidence)
             : verify_check("deployment.commit", "FAIL", "The latest deployment commit does not match the expected SHA.", commitEvidence, "DEPLOYMENT_SHA_MISMATCH");
-    return [statusCheck, commitCheck];
+    const freshnessCheck = minimumCreatedAt === undefined
+        ? verify_check("deployment.freshness", "WARN", "No run-start boundary was supplied; this deployment cannot be correlated to the current CI run.", [
+            {
+                source: "coolify",
+                observedAt,
+                field: "createdAt",
+                observed: deployment.created_at ?? null,
+            },
+        ], "DEPLOYMENT_RUN_CORRELATION_UNAVAILABLE", false)
+        : createdAt <= minimumCreatedAt
+            ? verify_check("deployment.freshness", "FAIL", "The latest deployment was not created strictly after the supplied run-start boundary.", [
+                {
+                    source: "coolify",
+                    observedAt,
+                    field: "createdAt",
+                    expected: new Date(minimumCreatedAt).toISOString(),
+                    observed: deployment.created_at ?? null,
+                },
+            ], "DEPLOYMENT_STALE")
+            : verify_check("deployment.freshness", "PASS", "The latest deployment was created after the supplied run-start boundary.", [
+                {
+                    source: "coolify",
+                    observedAt,
+                    field: "createdAt",
+                    expected: new Date(minimumCreatedAt).toISOString(),
+                    observed: deployment.created_at ?? null,
+                },
+            ]);
+    return [statusCheck, commitCheck, freshnessCheck];
 }
 const defaultSleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+const MAX_API_ATTEMPTS = 1800;
+const MAX_BACKOFF_MS = 30_000;
+function transientBackoffMs(failures, random) {
+    const ceiling = Math.min(1_000 * 2 ** Math.min(failures - 1, 30), MAX_BACKOFF_MS);
+    return Math.floor(ceiling * (0.5 + random() * 0.5));
+}
 function isTransient(error) {
     return (error instanceof CoolifyApiError &&
         (error.code === "COOLIFY_NETWORK_ERROR" ||
             error.code === "COOLIFY_RATE_LIMITED" ||
-            error.code === "COOLIFY_HTTP_ERROR"));
+            error.code === "COOLIFY_REQUEST_TIMEOUT" ||
+            (error.code === "COOLIFY_HTTP_ERROR" &&
+                error.status !== undefined &&
+                error.status >= 500)));
 }
 function providerFailure(error, observedAt) {
     const code = error instanceof CoolifyApiError ? error.code : "COOLIFY_REQUEST_FAILED";
@@ -50071,6 +50403,15 @@ function providerFailure(error, observedAt) {
 async function verifyCoolifyDeployment(options) {
     const now = options.now ?? Date.now;
     const sleep = options.sleep ?? defaultSleep;
+    const random = options.random ?? Math.random;
+    const minimumCreatedAt = options.startedAfter === undefined
+        ? undefined
+        : Date.parse(options.startedAfter);
+    if (minimumCreatedAt !== undefined && !Number.isFinite(minimumCreatedAt)) {
+        return [
+            verify_check("deployment.freshness", "FAIL", "The supplied run-start boundary is not a valid timestamp.", [], "DEPLOYMENT_STARTED_AFTER_INVALID"),
+        ];
+    }
     const deadline = now() + options.timeoutSeconds * 1000;
     let client;
     try {
@@ -50085,14 +50426,25 @@ async function verifyCoolifyDeployment(options) {
         return providerFailure(error, new Date(now()).toISOString());
     }
     let lastDeployment;
+    let unorderableDeploymentFound = false;
     let apiObservedAt;
     let lastError;
-    while (now() < deadline) {
+    let attempts = 0;
+    let consecutiveTransientFailures = 0;
+    while (now() < deadline && attempts < MAX_API_ATTEMPTS) {
+        const remainingBeforeRequest = deadline - now();
+        if (remainingBeforeRequest <= 0)
+            break;
+        attempts += 1;
         try {
-            const deployments = await client.listApplicationDeployments();
+            const deployments = await client.listApplicationDeployments(0, 20, remainingBeforeRequest);
             apiObservedAt = new Date(now()).toISOString();
             lastDeployment = newestDeployment(deployments);
+            unorderableDeploymentFound = deployments.length > 0 && !lastDeployment;
             lastError = undefined;
+            consecutiveTransientFailures = 0;
+            if (unorderableDeploymentFound)
+                break;
             if (lastDeployment) {
                 const status = normalizeStatus(lastDeployment.status);
                 if (status === "success" ||
@@ -50105,11 +50457,18 @@ async function verifyCoolifyDeployment(options) {
             lastError = error;
             if (!isTransient(error))
                 return providerFailure(error, new Date(now()).toISOString());
+            consecutiveTransientFailures += 1;
         }
         const remaining = deadline - now();
         if (remaining <= 0)
             break;
-        await sleep(Math.min(options.pollIntervalSeconds * 1000, remaining));
+        const requestedDelay = lastError instanceof CoolifyApiError &&
+            lastError.retryAfterMs !== undefined
+            ? lastError.retryAfterMs
+            : consecutiveTransientFailures > 0
+                ? transientBackoffMs(consecutiveTransientFailures, random)
+                : options.pollIntervalSeconds * 1000;
+        await sleep(Math.min(requestedDelay, remaining));
     }
     if (lastError && !apiObservedAt)
         return providerFailure(lastError, new Date(now()).toISOString());
@@ -50128,7 +50487,7 @@ async function verifyCoolifyDeployment(options) {
         : [], apiObservedAt ? undefined : "COOLIFY_NO_RESPONSE");
     return [
         providerCheck,
-        ...deploymentChecks(lastDeployment, options.expectedSha, observedAt, now() >= deadline),
+        ...deploymentChecks(lastDeployment, options.expectedSha, observedAt, now() >= deadline, unorderableDeploymentFound, minimumCreatedAt),
     ];
 }
 
@@ -50156,11 +50515,17 @@ function skippedRuntimeChecks(config, summary) {
 }
 async function runVerification(options) {
     const { config } = options;
+    const startedAfter = options.startedAfter ?? config.deployment.startedAfter;
+    if (startedAfter !== undefined &&
+        !Number.isFinite(Date.parse(startedAfter))) {
+        throw new Error("STARTED_AFTER_INVALID");
+    }
     const providerChecks = await verifyCoolifyDeployment({
         baseUrl: config.coolify.baseUrl,
         resourceUuid: config.coolify.resourceUuid,
         token: options.token,
         expectedSha: options.expectedSha,
+        ...(startedAfter ? { startedAfter } : {}),
         timeoutSeconds: config.deployment.timeoutSeconds,
         pollIntervalSeconds: config.deployment.pollIntervalSeconds,
         ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
@@ -50168,7 +50533,7 @@ async function runVerification(options) {
     const deploymentVerified = providerChecks
         .filter((result) => result.id === "provider.coolify-api" ||
         result.id.startsWith("deployment."))
-        .every((result) => result.status === "PASS");
+        .every((result) => !result.required || result.status === "PASS");
     const runtimeChecks = deploymentVerified
         ? await Promise.all(config.probes.map((probe) => verifyHttpProbe(probe, options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})))
         : skippedRuntimeChecks(config, "Runtime probes were not run because provider deployment evidence did not pass.");
@@ -50200,7 +50565,13 @@ async function main() {
         process.env.GITHUB_SHA;
     if (!expectedSha || !/^[a-f0-9]{40,64}$/i.test(expectedSha))
         throw new Error("Expected a full commit SHA.");
-    const report = await runVerification({ config, token, expectedSha });
+    const startedAfter = getInput("started-after") || config.deployment.startedAfter;
+    const report = await runVerification({
+        config,
+        token,
+        expectedSha,
+        ...(startedAfter ? { startedAfter } : {}),
+    });
     const reportPath = getInput("report-path") || "deploy-witness-report.json";
     await (0,promises_namespaceObject.writeFile)(reportPath, `${JSON.stringify(report, null, 2)}\n`, {
         encoding: "utf8",

@@ -2,6 +2,8 @@
 
 > Ürün adı DeployWitness olarak kararlaştırıldı. Repository: `erolsenol/deploy-witness`; npm paketi: `deploy-witness` (yayın durumu README ve release notes üzerinden takip edilir).
 
+> MVP sonrası geliştirme için öncelikli ve güncel yol haritası [`tasks/plan.md`](../tasks/plan.md); aşağıdaki belge ilk MVP kapsamının başlangıç planı ve teknik referansıdır.
+
 ## Amaç
 
 CI işinin başarılı olması veya dağıtım API’sinin “başladı/tamamlandı” demesi uygulamanın doğru sürümünün kullanıcıya hizmet verdiğini tek başına kanıtlamaz. Proje; beklenen commit, sağlayıcının dağıtım kaydı ve gerçek HTTP davranışını tek bir denetlenebilir raporda birleştiren, önce Coolify + GitHub Actions için çalışan, daha sonra yeni dağıtım sağlayıcılarıyla genişleyebilen bir CLI ve GitHub Action sunar.
