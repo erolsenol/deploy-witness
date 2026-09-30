@@ -84,7 +84,7 @@ The Action runs after your deploy step. Store the read-only provider token as a 
       run: echo "timestamp=$(node -p 'new Date().toISOString()')" >> "$GITHUB_OUTPUT"
 
     - name: Verify deployment
-      uses: erolsenol/deploy-witness@5348ff25cc1080a8590bad7bb699b7074f83193b
+      uses: erolsenol/deploy-witness@d9422aad71bf17e90fb8a38ae8d73c63945bbd35
       with:
         config: deploy-witness.yml
         coolify-token: ${{ secrets.COOLIFY_READ_ONLY_TOKEN }}
