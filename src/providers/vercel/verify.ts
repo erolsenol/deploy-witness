@@ -322,10 +322,8 @@ export async function verifyVercelDeployment(
         Math.max(1, deadline - now()),
       );
       lastObservedAt = new Date(now()).toISOString();
-      if (
-        detail.projectId &&
-        detail.projectId !== options.config.vercel.projectId
-      ) {
+      if (detail.projectId !== options.config.vercel.projectId) {
+        const identityKnown = detail.projectId !== undefined;
         return [
           result(
             "provider.vercel-api",
@@ -336,8 +334,10 @@ export async function verifyVercelDeployment(
           ),
           result(
             "deployment.status",
-            "FAIL",
-            "Vercel returned a deployment from a different project.",
+            identityKnown ? "FAIL" : "UNKNOWN",
+            identityKnown
+              ? "Vercel returned a deployment from a different project."
+              : "Vercel did not identify the deployment project.",
             lastObservedAt,
             startedAt,
             evidence(
@@ -346,7 +346,9 @@ export async function verifyVercelDeployment(
               options.config.vercel.projectId,
               detail.projectId,
             ),
-            "VERCEL_PROJECT_MISMATCH",
+            identityKnown
+              ? "VERCEL_PROJECT_MISMATCH"
+              : "VERCEL_PROJECT_ID_MISSING",
           ),
           result(
             "deployment.commit",
@@ -355,7 +357,9 @@ export async function verifyVercelDeployment(
             lastObservedAt,
             startedAt,
             [],
-            "VERCEL_PROJECT_MISMATCH",
+            identityKnown
+              ? "VERCEL_PROJECT_MISMATCH"
+              : "VERCEL_PROJECT_ID_MISSING",
           ),
         ];
       }
@@ -372,7 +376,9 @@ export async function verifyVercelDeployment(
       );
       if (
         statusCheck?.status === "UNKNOWN" &&
-        statusCheck.failureCode === "VERCEL_STATE_UNKNOWN"
+        ["VERCEL_STATE_UNKNOWN", "VERCEL_PROJECT_ID_MISSING"].includes(
+          statusCheck.failureCode ?? "",
+        )
       ) {
         return checks;
       }

@@ -52,6 +52,7 @@ describe("Vercel deployment adapter", () => {
     expect(requests[0]?.url.searchParams.get("projectId")).toBe("prj_demo");
     expect(requests[0]?.url.searchParams.get("teamId")).toBe("team_demo");
     expect(requests[0]?.url.searchParams.get("target")).toBe("production");
+    expect(requests[0]?.url.searchParams.get("limit")).toBe("20");
     expect(requests[0]?.init?.method).toBe("GET");
     expect(new Headers(requests[0]?.init?.headers).get("authorization")).toBe(
       "Bearer read-only-token",
@@ -73,6 +74,23 @@ describe("Vercel deployment adapter", () => {
     ).rejects.toMatchObject({
       code: "VERCEL_UNAUTHORIZED",
       status: 401,
+    });
+  });
+
+  it("reports rate limiting without leaking provider response content", async () => {
+    const client = new VercelClient({
+      projectId: "prj_demo",
+      token: "secret-token",
+      fetchImpl: async () =>
+        new Response("secret-token private response", { status: 429 }),
+    });
+
+    await expect(
+      client.listDeployments("production", 1_000),
+    ).rejects.toMatchObject({
+      code: "VERCEL_RATE_LIMITED",
+      status: 429,
+      message: "VERCEL_RATE_LIMITED",
     });
   });
 
@@ -177,4 +195,39 @@ describe("Vercel deployment adapter", () => {
       checks.find((check) => check.id === "deployment.status")?.status,
     ).toBe("PASS");
   });
+
+  it.each([
+    [undefined, "UNKNOWN", "VERCEL_PROJECT_ID_MISSING"],
+    ["prj_other", "FAIL", "VERCEL_PROJECT_MISMATCH"],
+  ] as const)(
+    "rejects deployment project identity %s",
+    async (projectId, status, failureCode) => {
+      const now = Date.now();
+      const checks = await verifyVercelDeployment({
+        config: vercelConfig(),
+        token: "read-only-token",
+        expectedSha,
+        fetchImpl: async (input) => {
+          const url = new URL(
+            input instanceof Request ? input.url : input.toString(),
+          );
+          return url.pathname === "/v7/deployments"
+            ? Response.json({
+                deployments: [{ uid: "dpl_demo", createdAt: now }],
+              })
+            : Response.json({
+                id: "dpl_demo",
+                ...(projectId ? { projectId } : {}),
+                readyState: "READY",
+                target: "production",
+                gitSource: { sha: expectedSha },
+              });
+        },
+      });
+
+      expect(
+        checks.find((check) => check.id === "deployment.status"),
+      ).toMatchObject({ status, failureCode });
+    },
+  );
 });

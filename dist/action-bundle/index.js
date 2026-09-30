@@ -50916,18 +50916,24 @@ async function verifyVercelDeployment(options) {
             }
             const detail = await client.getDeployment(id, Math.max(1, deadline - now()));
             lastObservedAt = new Date(now()).toISOString();
-            if (detail.projectId &&
-                detail.projectId !== options.config.vercel.projectId) {
+            if (detail.projectId !== options.config.vercel.projectId) {
+                const identityKnown = detail.projectId !== undefined;
                 return [
                     result("provider.vercel-api", "PASS", "Vercel API responded successfully.", lastObservedAt, startedAt),
-                    result("deployment.status", "FAIL", "Vercel returned a deployment from a different project.", lastObservedAt, startedAt, evidence(lastObservedAt, "projectId", options.config.vercel.projectId, detail.projectId), "VERCEL_PROJECT_MISMATCH"),
-                    result("deployment.commit", "UNKNOWN", "A matching project deployment is unavailable.", lastObservedAt, startedAt, [], "VERCEL_PROJECT_MISMATCH"),
+                    result("deployment.status", identityKnown ? "FAIL" : "UNKNOWN", identityKnown
+                        ? "Vercel returned a deployment from a different project."
+                        : "Vercel did not identify the deployment project.", lastObservedAt, startedAt, evidence(lastObservedAt, "projectId", options.config.vercel.projectId, detail.projectId), identityKnown
+                        ? "VERCEL_PROJECT_MISMATCH"
+                        : "VERCEL_PROJECT_ID_MISSING"),
+                    result("deployment.commit", "UNKNOWN", "A matching project deployment is unavailable.", lastObservedAt, startedAt, [], identityKnown
+                        ? "VERCEL_PROJECT_MISMATCH"
+                        : "VERCEL_PROJECT_ID_MISSING"),
                 ];
             }
             const checks = evaluateDeployment(options.config, detail, options.expectedSha, options.startedAfter, lastObservedAt, startedAt);
             const statusCheck = checks.find((check) => check.id === "deployment.status");
             if (statusCheck?.status === "UNKNOWN" &&
-                statusCheck.failureCode === "VERCEL_STATE_UNKNOWN") {
+                ["VERCEL_STATE_UNKNOWN", "VERCEL_PROJECT_ID_MISSING"].includes(statusCheck.failureCode ?? "")) {
                 return checks;
             }
             if (statusCheck?.status === "UNKNOWN") {

@@ -54,6 +54,25 @@ describe("Coolify API client", () => {
     expect(init?.redirect).toBe("error");
   });
 
+  it("uses the configured application identity and explicit page bounds", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json([]));
+    const client = new CoolifyClient({
+      baseUrl: "https://coolify.example.test",
+      resourceUuid: "application/with-slash",
+      token: "read-only-token",
+      fetchImpl,
+    });
+
+    await client.listApplicationDeployments(40, 10);
+
+    const [url] = fetchImpl.mock.calls[0] ?? [];
+    expect(String(url)).toBe(
+      "https://coolify.example.test/api/v1/deployments/applications/application%2Fwith-slash?skip=40&take=10",
+    );
+  });
+
   it("rejects insecure non-local provider URLs", () => {
     expect(
       () =>
