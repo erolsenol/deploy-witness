@@ -58,6 +58,13 @@ const HttpProbeSchema = z
     allowLocalHttp: z.boolean().default(false),
     expectedStatus: z.number().int().min(100).max(599).default(200),
     timeoutMs: z.number().int().min(250).max(30_000).default(5_000),
+    stability: z
+      .object({
+        consecutiveSuccesses: z.number().int().min(1).max(10).default(1),
+        intervalMs: z.number().int().min(100).max(10_000).default(1_000),
+      })
+      .strict()
+      .optional(),
     expectedHeader: z
       .object({ name: z.string().min(1), value: z.string() })
       .strict()

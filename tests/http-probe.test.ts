@@ -118,6 +118,54 @@ describe("HTTP runtime probes", () => {
     ).toBe(true);
   });
 
+  it("requires consecutive successful responses when stability is configured", async () => {
+    const responses = [
+      new Response(null, { status: 503 }),
+      new Response(null, { status: 200 }),
+      new Response(null, { status: 200 }),
+    ];
+    let requests = 0;
+    const result = await verifyHttpProbe(
+      {
+        ...baseProbe,
+        timeoutMs: 1_000,
+        stability: { consecutiveSuccesses: 2, intervalMs: 100 },
+      },
+      {
+        fetchImpl: async () => {
+          requests += 1;
+          return responses.shift() as Response;
+        },
+        lookupImpl: publicLookup,
+      },
+    );
+
+    expect(result.status).toBe("PASS");
+    expect(requests).toBe(3);
+    expect(
+      result.evidence.filter((item) => item.field.endsWith(":status")),
+    ).toHaveLength(3);
+    expect(result.summary).toContain("2 consecutive checks");
+  });
+
+  it("fails when the bounded attempts cannot produce enough consecutive successes", async () => {
+    const result = await verifyHttpProbe(
+      {
+        ...baseProbe,
+        timeoutMs: 250,
+        stability: { consecutiveSuccesses: 2, intervalMs: 1_000 },
+      },
+      {
+        fetchImpl: async () => new Response(null, { status: 503 }),
+        lookupImpl: publicLookup,
+      },
+    );
+
+    expect(result.status).toBe("FAIL");
+    expect(result.failureCode).toBe("HTTP_PROBE_FAILED");
+    expect(result.summary).toContain("within 1 attempts");
+  });
+
   it("pins the localhost development request to the validated address", async () => {
     const server = createServer((_request, response) => {
       response.writeHead(200, { "content-type": "application/json" });

@@ -131,7 +131,7 @@ function checkResult(
   };
 }
 
-export async function verifyHttpProbe(
+async function verifySingleHttpProbe(
   probe: HttpProbeConfig,
   options: HttpProbeOptions = {},
 ): Promise<CheckResult> {
@@ -325,6 +325,86 @@ export async function verifyHttpProbe(
     Date.now() - started,
     evidence,
     problems.length === 0 ? undefined : "HTTP_PROBE_FAILED",
+  );
+}
+
+export async function verifyHttpProbe(
+  probe: HttpProbeConfig,
+  options: HttpProbeOptions = {},
+): Promise<CheckResult> {
+  if (!probe.stability || probe.stability.consecutiveSuccesses === 1) {
+    return verifySingleHttpProbe(probe, options);
+  }
+
+  const consecutiveRequired = probe.stability?.consecutiveSuccesses ?? 1;
+  const intervalMs = probe.stability?.intervalMs ?? 1_000;
+  const started = Date.now();
+  const maxAttempts = Math.min(
+    20,
+    Math.max(1, Math.floor(probe.timeoutMs / intervalMs) + 1),
+  );
+  const attempts: CheckResult[] = [];
+  let consecutiveSuccesses = 0;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const remainingMs = probe.timeoutMs - (Date.now() - started);
+    if (remainingMs <= 0) break;
+
+    const result = await verifySingleHttpProbe(
+      { ...probe, timeoutMs: Math.min(probe.timeoutMs, remainingMs) },
+      options,
+    );
+    attempts.push(result);
+    consecutiveSuccesses =
+      result.status === "PASS" ? consecutiveSuccesses + 1 : 0;
+    if (consecutiveSuccesses >= consecutiveRequired) break;
+
+    const waitMs = Math.min(
+      intervalMs,
+      probe.timeoutMs - (Date.now() - started),
+    );
+    if (waitMs <= 0 || attempt === maxAttempts - 1) break;
+    await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+  }
+
+  const lastAttempt = attempts.at(-1);
+  const passed = consecutiveSuccesses >= consecutiveRequired;
+  const observedAt = new Date().toISOString();
+  const evidence: CheckResult["evidence"] = attempts.flatMap(
+    (result, index) => [
+      {
+        source: "http",
+        observedAt: result.evidence[0]?.observedAt ?? observedAt,
+        field: `attempt:${index + 1}:status`,
+        expected: "PASS",
+        observed: result.status,
+      },
+      ...result.evidence,
+    ],
+  );
+
+  if (!lastAttempt) {
+    return checkResult(
+      probe,
+      "FAIL",
+      "The endpoint probe deadline expired before a request could complete.",
+      observedAt,
+      Date.now() - started,
+      [],
+      "HTTP_PROBE_TIMEOUT",
+    );
+  }
+
+  return checkResult(
+    probe,
+    passed ? "PASS" : "FAIL",
+    passed
+      ? `HTTP endpoint passed ${consecutiveRequired} consecutive checks.`
+      : `HTTP endpoint did not pass ${consecutiveRequired} consecutive checks within ${attempts.length} attempts.`,
+    observedAt,
+    Date.now() - started,
+    evidence,
+    passed ? undefined : (lastAttempt.failureCode ?? "HTTP_STABILITY_FAILED"),
   );
 }
 

@@ -13,9 +13,21 @@ DeployWitness verifies; it does not deploy, roll back, run migrations, or change
 - The deployment commit exactly matches the expected full Git SHA.
 - If `started-after` is provided, the Coolify deployment must have been created after that CI run boundary; without it, the report warns that it cannot correlate the deployment to the current run.
 - Configured health endpoints and optional version markers respond as expected.
+- Optional stability checks can require several consecutive successful responses after the deployment.
 - Every check is reported separately, with missing or unknown evidence kept visible.
 
 An HTTP 200 alone does not prove that the requested commit is live. Add a version endpoint or response header if you need an independent runtime commit check.
+
+For an endpoint that briefly flaps during startup, add bounded stability to that probe. The per-probe `timeoutMs` remains the total deadline; attempts are capped at 20 and failed attempts reset the consecutive-success count:
+
+```yaml
+probes:
+  - name: public-health
+    url: https://app.example.com/health
+    stability:
+      consecutiveSuccesses: 3
+      intervalMs: 1000
+```
 
 ## Quick start
 

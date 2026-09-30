@@ -1,6 +1,6 @@
 # DeployWitness — Uygulama Görev Listesi
 
-> Progress update (2026-09-30): v0.1 MVP remains public. Roadmap slices now add bounded Coolify retries with Retry-After, deployment freshness correlation, pinned public-DNS HTTP probes with explicit localhost opt-in, and JUnit output. Local suite: 57 tests. npm registry publication and provider expansion remain separate roadmap items.
+> Progress update (2026-09-30): v0.1 MVP remains public. Roadmap slices now add bounded Coolify retries with Retry-After, deployment freshness correlation, pinned public-DNS HTTP probes with explicit localhost opt-in, bounded consecutive-success runtime checks, and JUnit output. Local suite: 59 tests. npm registry publication and provider expansion remain separate roadmap items.
 
 Bu liste plan onaylandıktan sonra uygulama sırasıdır. Her görev ayrı ve gözden geçirilebilir bir dilim olarak bitirilir; geniş görevler alt görevlere bölünür.
 

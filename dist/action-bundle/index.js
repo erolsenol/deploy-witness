@@ -49575,6 +49575,12 @@ const HttpProbeSchema = object({
     allowLocalHttp: schemas_boolean().default(false),
     expectedStatus: schemas_number().int().min(100).max(599).default(200),
     timeoutMs: schemas_number().int().min(250).max(30_000).default(5_000),
+    stability: object({
+        consecutiveSuccesses: schemas_number().int().min(1).max(10).default(1),
+        intervalMs: schemas_number().int().min(100).max(10_000).default(1_000),
+    })
+        .strict()
+        .optional(),
     expectedHeader: object({ name: schemas_string().min(1), value: schemas_string() })
         .strict()
         .optional()
@@ -49951,7 +49957,7 @@ function checkResult(probe, status, summary, _observedAt, durationMs, evidence, 
         ...(failureCode ? { failureCode } : {}),
     };
 }
-async function verifyHttpProbe(probe, options = {}) {
+async function verifySingleHttpProbe(probe, options = {}) {
     const started = Date.now();
     const observedAt = new Date(started).toISOString();
     const url = safeUrl(probe.url, probe.allowLocalHttp);
@@ -50083,6 +50089,51 @@ async function verifyHttpProbe(probe, options = {}) {
     return checkResult(probe, status, problems.length === 0
         ? "HTTP endpoint and configured runtime markers matched."
         : `${problems.join("; ")}.`, observedAt, Date.now() - started, evidence, problems.length === 0 ? undefined : "HTTP_PROBE_FAILED");
+}
+async function verifyHttpProbe(probe, options = {}) {
+    if (!probe.stability || probe.stability.consecutiveSuccesses === 1) {
+        return verifySingleHttpProbe(probe, options);
+    }
+    const consecutiveRequired = probe.stability?.consecutiveSuccesses ?? 1;
+    const intervalMs = probe.stability?.intervalMs ?? 1_000;
+    const started = Date.now();
+    const maxAttempts = Math.min(20, Math.max(1, Math.floor(probe.timeoutMs / intervalMs) + 1));
+    const attempts = [];
+    let consecutiveSuccesses = 0;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const remainingMs = probe.timeoutMs - (Date.now() - started);
+        if (remainingMs <= 0)
+            break;
+        const result = await verifySingleHttpProbe({ ...probe, timeoutMs: Math.min(probe.timeoutMs, remainingMs) }, options);
+        attempts.push(result);
+        consecutiveSuccesses =
+            result.status === "PASS" ? consecutiveSuccesses + 1 : 0;
+        if (consecutiveSuccesses >= consecutiveRequired)
+            break;
+        const waitMs = Math.min(intervalMs, probe.timeoutMs - (Date.now() - started));
+        if (waitMs <= 0 || attempt === maxAttempts - 1)
+            break;
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+    const lastAttempt = attempts.at(-1);
+    const passed = consecutiveSuccesses >= consecutiveRequired;
+    const observedAt = new Date().toISOString();
+    const evidence = attempts.flatMap((result, index) => [
+        {
+            source: "http",
+            observedAt: result.evidence[0]?.observedAt ?? observedAt,
+            field: `attempt:${index + 1}:status`,
+            expected: "PASS",
+            observed: result.status,
+        },
+        ...result.evidence,
+    ]);
+    if (!lastAttempt) {
+        return checkResult(probe, "FAIL", "The endpoint probe deadline expired before a request could complete.", observedAt, Date.now() - started, [], "HTTP_PROBE_TIMEOUT");
+    }
+    return checkResult(probe, passed ? "PASS" : "FAIL", passed
+        ? `HTTP endpoint passed ${consecutiveRequired} consecutive checks.`
+        : `HTTP endpoint did not pass ${consecutiveRequired} consecutive checks within ${attempts.length} attempts.`, observedAt, Date.now() - started, evidence, passed ? undefined : (lastAttempt.failureCode ?? "HTTP_STABILITY_FAILED"));
 }
 async function readLimitedBody(response, maxBytes) {
     if (!response.body)
