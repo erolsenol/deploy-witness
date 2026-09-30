@@ -50347,6 +50347,108 @@ function providerCapabilities(provider, apiAvailable) {
     });
 }
 //# sourceMappingURL=capabilities.js.map
+;// CONCATENATED MODULE: ./dist/providers/deployment-evidence.js
+function deployment_evidence_check(id, status, summary, observedAt, startedAt, evidence, failureCode, required = true) {
+    return {
+        id,
+        category: "deployment",
+        required,
+        status,
+        summary,
+        durationMs: Math.max(0, Date.now() - startedAt),
+        evidence,
+        ...(failureCode ? { failureCode } : {}),
+    };
+}
+function evaluateDeploymentEvidence(options) {
+    const { deployment, expectedSha, startedAfter, observedAt, startedAt } = options;
+    const providerName = deployment.provider === "coolify" ? "Coolify" : "Vercel";
+    const status = deployment.target ? "failure" : deployment.status;
+    const targetMismatch = deployment.target !== undefined;
+    const statusEvidence = deployment.rawStatus
+        ? [
+            {
+                source: deployment.provider,
+                observedAt,
+                field: deployment.statusField,
+                observed: deployment.rawStatus,
+            },
+        ]
+        : [];
+    const statusCheck = status === "success"
+        ? deployment_evidence_check("deployment.status", "PASS", `${providerName} reports a successful terminal deployment.`, observedAt, startedAt, statusEvidence)
+        : status === "failure"
+            ? deployment_evidence_check("deployment.status", "FAIL", targetMismatch
+                ? `${providerName} deployment target does not match the configured target.`
+                : `${providerName} reports a failed or cancelled deployment.`, observedAt, startedAt, targetMismatch
+                ? [
+                    {
+                        source: deployment.provider,
+                        observedAt,
+                        field: "target",
+                        expected: deployment.target?.expected ?? null,
+                        observed: deployment.target?.observed ?? null,
+                    },
+                ]
+                : statusEvidence, targetMismatch
+                ? "VERCEL_TARGET_MISMATCH"
+                : (deployment.failureStatusCode ?? "DEPLOYMENT_FAILED"))
+            : deployment_evidence_check("deployment.status", "UNKNOWN", status === "pending"
+                ? `${providerName} deployment is still in progress.`
+                : `${providerName} returned a deployment status DeployWitness does not recognize.`, observedAt, startedAt, statusEvidence, status === "pending"
+                ? (deployment.pendingStatusCode ?? "DEPLOYMENT_PENDING")
+                : (deployment.unknownStatusCode ??
+                    `${deployment.provider.toUpperCase()}_STATE_UNKNOWN`));
+    const sha = deployment.commitSha;
+    const commitEvidence = sha
+        ? [
+            {
+                source: deployment.provider,
+                observedAt,
+                field: deployment.commitField,
+                expected: expectedSha,
+                observed: sha,
+            },
+        ]
+        : [];
+    const commitCheck = !sha
+        ? deployment_evidence_check("deployment.commit", "UNKNOWN", `${providerName} did not provide a deployment commit SHA.`, observedAt, startedAt, [], "DEPLOYMENT_COMMIT_MISSING")
+        : sha.toLowerCase() === expectedSha.toLowerCase()
+            ? deployment_evidence_check("deployment.commit", "PASS", `${providerName} deployment commit matches the expected full SHA.`, observedAt, startedAt, commitEvidence)
+            : deployment_evidence_check("deployment.commit", "FAIL", `${providerName} deployment commit does not match the expected SHA.`, observedAt, startedAt, commitEvidence, "DEPLOYMENT_SHA_MISMATCH");
+    const freshnessCheck = startedAfter === undefined
+        ? deployment_evidence_check("deployment.freshness", "WARN", "No run-start boundary was supplied; this deployment cannot be correlated to the current CI run.", observedAt, startedAt, [
+            {
+                source: deployment.provider,
+                observedAt,
+                field: deployment.createdAtField,
+                observed: deployment.createdAt ?? null,
+            },
+        ], "DEPLOYMENT_RUN_CORRELATION_UNAVAILABLE", false)
+        : deployment.createdAt === undefined
+            ? deployment_evidence_check("deployment.freshness", "UNKNOWN", `${providerName} did not provide a usable deployment creation timestamp.`, observedAt, startedAt, [], "DEPLOYMENT_ORDER_UNCERTAIN")
+            : deployment.createdAt <= Date.parse(startedAfter)
+                ? deployment_evidence_check("deployment.freshness", "FAIL", `${providerName} deployment was not created strictly after the supplied run-start boundary.`, observedAt, startedAt, [
+                    {
+                        source: deployment.provider,
+                        observedAt,
+                        field: deployment.createdAtField,
+                        expected: Date.parse(startedAfter),
+                        observed: deployment.createdAt,
+                    },
+                ], "DEPLOYMENT_STALE")
+                : deployment_evidence_check("deployment.freshness", "PASS", `${providerName} deployment was created after the supplied run-start boundary.`, observedAt, startedAt, [
+                    {
+                        source: deployment.provider,
+                        observedAt,
+                        field: deployment.createdAtField,
+                        expected: Date.parse(startedAfter),
+                        observed: deployment.createdAt,
+                    },
+                ]);
+    return [statusCheck, commitCheck, freshnessCheck];
+}
+//# sourceMappingURL=deployment-evidence.js.map
 ;// CONCATENATED MODULE: ./dist/providers/coolify/types.js
 
 const CoolifyDeploymentSchema = object({
@@ -50506,6 +50608,7 @@ class CoolifyClient {
 ;// CONCATENATED MODULE: ./dist/providers/coolify/verify.js
 
 
+
 function normalizeStatus(raw) {
     switch (raw?.trim().toLowerCase()) {
         case "queued":
@@ -50557,62 +50660,26 @@ function deploymentChecks(deployment, expectedSha, observedAt, noDeploymentExpir
     const rawStatus = deployment.status;
     const sha = deploymentSha(deployment);
     const createdAt = deploymentTimestamp(deployment);
-    const providerStatus = normalizeStatus(rawStatus);
-    const statusEvidence = rawStatus
-        ? [{ source: "coolify", observedAt, field: "status", observed: rawStatus }]
-        : [];
-    const commitEvidence = sha
-        ? [
-            {
-                source: "coolify",
-                observedAt,
-                field: "commit",
-                expected: expectedSha,
-                observed: sha,
-            },
-        ]
-        : [];
-    const statusCheck = providerStatus === "success"
-        ? verify_check("deployment.status", "PASS", "Coolify reports a successful terminal deployment.", statusEvidence)
-        : providerStatus === "failure"
-            ? verify_check("deployment.status", "FAIL", "Coolify reports a failed or cancelled deployment.", statusEvidence, "DEPLOYMENT_FAILED")
-            : providerStatus === "pending"
-                ? verify_check("deployment.status", "UNKNOWN", "The latest Coolify deployment is still in progress.", statusEvidence, "DEPLOYMENT_PENDING")
-                : verify_check("deployment.status", "UNKNOWN", "Coolify returned a deployment status DeployWitness does not recognize.", statusEvidence, "DEPLOYMENT_STATUS_UNKNOWN");
-    const commitCheck = !sha
-        ? verify_check("deployment.commit", "UNKNOWN", "Coolify did not provide a deployment commit SHA.", [], "DEPLOYMENT_COMMIT_MISSING")
-        : sha.toLowerCase() === expectedSha.toLowerCase()
-            ? verify_check("deployment.commit", "PASS", "The latest deployment commit exactly matches the expected SHA.", commitEvidence)
-            : verify_check("deployment.commit", "FAIL", "The latest deployment commit does not match the expected SHA.", commitEvidence, "DEPLOYMENT_SHA_MISMATCH");
-    const freshnessCheck = minimumCreatedAt === undefined
-        ? verify_check("deployment.freshness", "WARN", "No run-start boundary was supplied; this deployment cannot be correlated to the current CI run.", [
-            {
-                source: "coolify",
-                observedAt,
-                field: "createdAt",
-                observed: deployment.created_at ?? null,
-            },
-        ], "DEPLOYMENT_RUN_CORRELATION_UNAVAILABLE", false)
-        : createdAt <= minimumCreatedAt
-            ? verify_check("deployment.freshness", "FAIL", "The latest deployment was not created strictly after the supplied run-start boundary.", [
-                {
-                    source: "coolify",
-                    observedAt,
-                    field: "createdAt",
-                    expected: new Date(minimumCreatedAt).toISOString(),
-                    observed: deployment.created_at ?? null,
-                },
-            ], "DEPLOYMENT_STALE")
-            : verify_check("deployment.freshness", "PASS", "The latest deployment was created after the supplied run-start boundary.", [
-                {
-                    source: "coolify",
-                    observedAt,
-                    field: "createdAt",
-                    expected: new Date(minimumCreatedAt).toISOString(),
-                    observed: deployment.created_at ?? null,
-                },
-            ]);
-    return [statusCheck, commitCheck, freshnessCheck];
+    return evaluateDeploymentEvidence({
+        deployment: {
+            provider: "coolify",
+            status: normalizeStatus(rawStatus),
+            ...(rawStatus !== undefined ? { rawStatus } : {}),
+            statusField: "status",
+            ...(sha !== undefined ? { commitSha: sha } : {}),
+            commitField: deployment.git_commit_sha ? "git_commit_sha" : "commit",
+            ...(Number.isFinite(createdAt) ? { createdAt } : {}),
+            createdAtField: "created_at",
+            pendingStatusCode: "DEPLOYMENT_PENDING",
+            unknownStatusCode: "DEPLOYMENT_STATUS_UNKNOWN",
+        },
+        expectedSha,
+        ...(minimumCreatedAt !== undefined
+            ? { startedAfter: new Date(minimumCreatedAt).toISOString() }
+            : {}),
+        observedAt,
+        startedAt: Date.parse(observedAt),
+    });
 }
 const defaultSleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const MAX_API_ATTEMPTS = 1800;
@@ -50903,6 +50970,7 @@ class VercelClient {
 ;// CONCATENATED MODULE: ./dist/providers/vercel/verify.js
 
 
+
 const verify_defaultSleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 function result(id, status, summary, _observedAt, startedAt, evidence = [], failureCode, required = true) {
     return {
@@ -50970,54 +51038,43 @@ function verify_newestDeployment(deployments) {
     return { deployment: newest };
 }
 function evaluateDeployment(config, deployment, expectedSha, startedAfter, observedAt, startedAt) {
-    const checks = [];
     const timestamp = vercelTimestamp(deployment);
     const normalizedTarget = deployment.target ?? "preview";
     const wantedTarget = config.vercel.target;
-    const targetMatches = normalizedTarget === wantedTarget;
     const readyState = deployment.readyState;
-    const pending = ["BUILDING", "INITIALIZING", "QUEUED"].includes(readyState);
-    const status = readyState === "READY"
-        ? "PASS"
-        : readyState === "ERROR" || readyState === "CANCELED"
-            ? "FAIL"
-            : "UNKNOWN";
-    checks.push(result("provider.vercel-api", "PASS", "Vercel deployment details were retrieved.", observedAt, startedAt), result("deployment.status", targetMatches ? status : "FAIL", targetMatches
-        ? `Vercel deployment state is ${readyState}.`
-        : `Vercel deployment target ${normalizedTarget} does not match configured target ${wantedTarget}.`, observedAt, startedAt, evidence(observedAt, targetMatches ? "readyState" : "target", targetMatches ? "READY" : wantedTarget, targetMatches ? readyState : normalizedTarget), !targetMatches
-        ? "VERCEL_TARGET_MISMATCH"
-        : pending
-            ? "VERCEL_DEPLOYMENT_PENDING"
-            : status === "UNKNOWN"
-                ? "VERCEL_STATE_UNKNOWN"
-                : status === "FAIL"
-                    ? `VERCEL_${readyState}`
-                    : undefined));
     const sha = deployment.gitSource?.sha;
-    const shaMatches = sha !== undefined && sha.toLowerCase() === expectedSha.toLowerCase();
-    checks.push(result("deployment.commit", sha === undefined ? "UNKNOWN" : shaMatches ? "PASS" : "FAIL", sha === undefined
-        ? "Vercel did not provide a Git source commit for this deployment."
-        : shaMatches
-            ? "Vercel Git source commit matches the expected full SHA."
-            : "Vercel Git source commit does not match the expected SHA.", observedAt, startedAt, evidence(observedAt, "gitSource.sha", expectedSha, sha ?? null), sha === undefined
-        ? "DEPLOYMENT_COMMIT_MISSING"
-        : shaMatches
-            ? undefined
-            : "DEPLOYMENT_SHA_MISMATCH"));
-    if (startedAfter === undefined) {
-        checks.push(result("deployment.freshness", "WARN", "No run-start boundary was supplied; this deployment cannot be correlated to the current CI run.", observedAt, startedAt, evidence(observedAt, "createdAt", undefined, timestamp ?? null), "DEPLOYMENT_RUN_CORRELATION_UNAVAILABLE", false));
-    }
-    else if (timestamp === undefined) {
-        checks.push(result("deployment.freshness", "UNKNOWN", "Vercel did not provide a usable deployment creation timestamp.", observedAt, startedAt, [], "DEPLOYMENT_ORDER_UNCERTAIN"));
-    }
-    else {
-        const boundary = Date.parse(startedAfter);
-        const fresh = timestamp > boundary;
-        checks.push(result("deployment.freshness", fresh ? "PASS" : "FAIL", fresh
-            ? "Vercel deployment was created after the supplied run-start boundary."
-            : "Vercel deployment was not created strictly after the supplied run-start boundary.", observedAt, startedAt, evidence(observedAt, "createdAt", boundary, timestamp), fresh ? undefined : "DEPLOYMENT_STALE"));
-    }
-    return checks;
+    const status = readyState === "READY"
+        ? "success"
+        : readyState === "ERROR" || readyState === "CANCELED"
+            ? "failure"
+            : ["BUILDING", "INITIALIZING", "QUEUED"].includes(readyState)
+                ? "pending"
+                : "unknown";
+    const targetMismatch = normalizedTarget !== wantedTarget;
+    return evaluateDeploymentEvidence({
+        deployment: {
+            provider: "vercel",
+            status,
+            rawStatus: readyState,
+            statusField: "readyState",
+            ...(sha !== undefined ? { commitSha: sha } : {}),
+            commitField: "gitSource.sha",
+            ...(timestamp !== undefined ? { createdAt: timestamp } : {}),
+            createdAtField: "createdAt",
+            ...(targetMismatch
+                ? { target: { expected: wantedTarget, observed: normalizedTarget } }
+                : {}),
+            ...(status === "failure"
+                ? { failureStatusCode: `VERCEL_${readyState}` }
+                : {}),
+            pendingStatusCode: "VERCEL_DEPLOYMENT_PENDING",
+            unknownStatusCode: "VERCEL_STATE_UNKNOWN",
+        },
+        expectedSha,
+        ...(startedAfter ? { startedAfter } : {}),
+        observedAt,
+        startedAt,
+    });
 }
 async function verifyVercelDeployment(options) {
     const now = options.now ?? Date.now;
@@ -51070,7 +51127,11 @@ async function verifyVercelDeployment(options) {
                         : "VERCEL_PROJECT_ID_MISSING"),
                 ];
             }
-            const checks = evaluateDeployment(options.config, detail, options.expectedSha, options.startedAfter, lastObservedAt, startedAt);
+            const deploymentChecks = evaluateDeployment(options.config, detail, options.expectedSha, options.startedAfter, lastObservedAt, startedAt);
+            const checks = [
+                result("provider.vercel-api", "PASS", "Vercel deployment details were retrieved.", lastObservedAt, startedAt),
+                ...deploymentChecks,
+            ];
             const statusCheck = checks.find((check) => check.id === "deployment.status");
             if (statusCheck?.status === "UNKNOWN" &&
                 ["VERCEL_STATE_UNKNOWN", "VERCEL_PROJECT_ID_MISSING"].includes(statusCheck.failureCode ?? "")) {

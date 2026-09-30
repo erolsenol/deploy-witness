@@ -1,4 +1,5 @@
 import type { CheckResult, VerificationConfig } from "../../contracts/index.js";
+import { evaluateDeploymentEvidence } from "../deployment-evidence.js";
 import { VercelApiError, VercelClient } from "./client.js";
 import {
   type VercelDeploymentDetail,
@@ -150,119 +151,44 @@ function evaluateDeployment(
   observedAt: string,
   startedAt: number,
 ): readonly CheckResult[] {
-  const checks: CheckResult[] = [];
   const timestamp = vercelTimestamp(deployment);
   const normalizedTarget = deployment.target ?? "preview";
   const wantedTarget = config.vercel.target;
-  const targetMatches = normalizedTarget === wantedTarget;
   const readyState = deployment.readyState;
-  const pending = ["BUILDING", "INITIALIZING", "QUEUED"].includes(readyState);
-  const status: CheckResult["status"] =
-    readyState === "READY"
-      ? "PASS"
-      : readyState === "ERROR" || readyState === "CANCELED"
-        ? "FAIL"
-        : "UNKNOWN";
-  checks.push(
-    result(
-      "provider.vercel-api",
-      "PASS",
-      "Vercel deployment details were retrieved.",
-      observedAt,
-      startedAt,
-    ),
-    result(
-      "deployment.status",
-      targetMatches ? status : "FAIL",
-      targetMatches
-        ? `Vercel deployment state is ${readyState}.`
-        : `Vercel deployment target ${normalizedTarget} does not match configured target ${wantedTarget}.`,
-      observedAt,
-      startedAt,
-      evidence(
-        observedAt,
-        targetMatches ? "readyState" : "target",
-        targetMatches ? "READY" : wantedTarget,
-        targetMatches ? readyState : normalizedTarget,
-      ),
-      !targetMatches
-        ? "VERCEL_TARGET_MISMATCH"
-        : pending
-          ? "VERCEL_DEPLOYMENT_PENDING"
-          : status === "UNKNOWN"
-            ? "VERCEL_STATE_UNKNOWN"
-            : status === "FAIL"
-              ? `VERCEL_${readyState}`
-              : undefined,
-    ),
-  );
-
   const sha = deployment.gitSource?.sha;
-  const shaMatches =
-    sha !== undefined && sha.toLowerCase() === expectedSha.toLowerCase();
-  checks.push(
-    result(
-      "deployment.commit",
-      sha === undefined ? "UNKNOWN" : shaMatches ? "PASS" : "FAIL",
-      sha === undefined
-        ? "Vercel did not provide a Git source commit for this deployment."
-        : shaMatches
-          ? "Vercel Git source commit matches the expected full SHA."
-          : "Vercel Git source commit does not match the expected SHA.",
-      observedAt,
-      startedAt,
-      evidence(observedAt, "gitSource.sha", expectedSha, sha ?? null),
-      sha === undefined
-        ? "DEPLOYMENT_COMMIT_MISSING"
-        : shaMatches
-          ? undefined
-          : "DEPLOYMENT_SHA_MISMATCH",
-    ),
-  );
-
-  if (startedAfter === undefined) {
-    checks.push(
-      result(
-        "deployment.freshness",
-        "WARN",
-        "No run-start boundary was supplied; this deployment cannot be correlated to the current CI run.",
-        observedAt,
-        startedAt,
-        evidence(observedAt, "createdAt", undefined, timestamp ?? null),
-        "DEPLOYMENT_RUN_CORRELATION_UNAVAILABLE",
-        false,
-      ),
-    );
-  } else if (timestamp === undefined) {
-    checks.push(
-      result(
-        "deployment.freshness",
-        "UNKNOWN",
-        "Vercel did not provide a usable deployment creation timestamp.",
-        observedAt,
-        startedAt,
-        [],
-        "DEPLOYMENT_ORDER_UNCERTAIN",
-      ),
-    );
-  } else {
-    const boundary = Date.parse(startedAfter);
-    const fresh = timestamp > boundary;
-    checks.push(
-      result(
-        "deployment.freshness",
-        fresh ? "PASS" : "FAIL",
-        fresh
-          ? "Vercel deployment was created after the supplied run-start boundary."
-          : "Vercel deployment was not created strictly after the supplied run-start boundary.",
-        observedAt,
-        startedAt,
-        evidence(observedAt, "createdAt", boundary, timestamp),
-        fresh ? undefined : "DEPLOYMENT_STALE",
-      ),
-    );
-  }
-  return checks;
+  const status =
+    readyState === "READY"
+      ? "success"
+      : readyState === "ERROR" || readyState === "CANCELED"
+        ? "failure"
+        : ["BUILDING", "INITIALIZING", "QUEUED"].includes(readyState)
+          ? "pending"
+          : "unknown";
+  const targetMismatch = normalizedTarget !== wantedTarget;
+  return evaluateDeploymentEvidence({
+    deployment: {
+      provider: "vercel",
+      status,
+      rawStatus: readyState,
+      statusField: "readyState",
+      ...(sha !== undefined ? { commitSha: sha } : {}),
+      commitField: "gitSource.sha",
+      ...(timestamp !== undefined ? { createdAt: timestamp } : {}),
+      createdAtField: "createdAt",
+      ...(targetMismatch
+        ? { target: { expected: wantedTarget, observed: normalizedTarget } }
+        : {}),
+      ...(status === "failure"
+        ? { failureStatusCode: `VERCEL_${readyState}` }
+        : {}),
+      pendingStatusCode: "VERCEL_DEPLOYMENT_PENDING",
+      unknownStatusCode: "VERCEL_STATE_UNKNOWN",
+    },
+    expectedSha,
+    ...(startedAfter ? { startedAfter } : {}),
+    observedAt,
+    startedAt,
+  });
 }
 
 export async function verifyVercelDeployment(
@@ -372,7 +298,7 @@ export async function verifyVercelDeployment(
           ),
         ];
       }
-      const checks = evaluateDeployment(
+      const deploymentChecks = evaluateDeployment(
         options.config,
         detail,
         options.expectedSha,
@@ -380,6 +306,16 @@ export async function verifyVercelDeployment(
         lastObservedAt,
         startedAt,
       );
+      const checks = [
+        result(
+          "provider.vercel-api",
+          "PASS",
+          "Vercel deployment details were retrieved.",
+          lastObservedAt,
+          startedAt,
+        ),
+        ...deploymentChecks,
+      ];
       const statusCheck = checks.find(
         (check) => check.id === "deployment.status",
       );
