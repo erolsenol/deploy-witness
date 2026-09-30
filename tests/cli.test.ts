@@ -46,4 +46,18 @@ describe("CLI configuration commands", () => {
     expect(result.stdout).not.toContain("file-target.example.test");
     expect(result.stdout).not.toContain("a".repeat(40));
   });
+
+  it("prints a machine-readable JSON Schema for config and report contracts", () => {
+    for (const name of ["config", "report"] as const) {
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "schema", name],
+        { cwd: process.cwd(), encoding: "utf8" },
+      );
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+      });
+    }
+  });
 });

@@ -54,6 +54,12 @@ Set `COOLIFY_API_TOKEN` in the environment from your secret manager before runni
 
 `COOLIFY_API_TOKEN` remains a secret input and is not part of config inspection or reports.
 
+## JSON Schema contracts
+
+The versioned config and report schemas live in [`schemas/`](schemas/). Regenerate them after changing the Zod contracts with `npm run schema:generate`; CI checks that the committed schemas stay synchronized. You can also print a schema for tooling with `node dist/cli.js schema config` or `node dist/cli.js schema report`. JSON Schema documents structural constraints; run `config validate` for DeployWitness-specific semantic and security validation before using a configuration.
+
+JUnit output preserves the verification decision: required warnings and failures become failures, required unknown/unsupported/skipped checks become errors, and optional non-pass checks remain skipped so they do not turn an overall PASS into a failing CI result.
+
 ## GitHub Actions
 
 The Action runs after your deploy step. Store the read-only Coolify API token as a GitHub Actions secret and provide it through the Action input; never put the token in the config file.

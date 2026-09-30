@@ -18,6 +18,7 @@
   },
   "files": [
     "dist",
+    "schemas",
     "action.yml",
     "README.md",
     "LICENSE",
@@ -31,6 +32,8 @@
     "test:watch": "vitest",
     "lint": "biome check .",
     "format": "biome format --write .",
+    "schema:generate": "tsx scripts/generate-schemas.ts",
+    "schema:check": "tsx scripts/generate-schemas.ts --check",
     "clean": "node -e \"import('node:fs').then(({rmSync}) => rmSync('dist', {recursive: true, force: true}))\"",
     "prepack": "npm run build"
   },

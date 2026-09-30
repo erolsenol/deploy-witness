@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { VerificationReportSchema } from "../src/contracts/index.js";
+import { decide, VerificationReportSchema } from "../src/contracts/index.js";
 import { renderJUnit } from "../src/reporters/junit.js";
 
 describe("JUnit reporter", () => {
@@ -12,7 +12,7 @@ describe("JUnit reporter", () => {
       expectedSha: "a".repeat(40),
       provider: "coolify",
       resourceUuid: "application-1",
-      decision: "INCOMPLETE",
+      decision: "FAIL",
       checks: [
         {
           id: "provider.coolify-api",
@@ -55,14 +55,38 @@ describe("JUnit reporter", () => {
           summary: "Provider evidence did not pass.",
           durationMs: 0,
         },
+        {
+          id: "runtime.required-warning",
+          category: "runtime",
+          required: true,
+          status: "WARN",
+          summary: "A required check returned a warning.",
+          durationMs: 1,
+        },
+        {
+          id: "runtime.optional-fail",
+          category: "runtime",
+          required: false,
+          status: "FAIL",
+          summary: "Optional check failed without affecting the decision.",
+          durationMs: 2,
+        },
       ],
     });
 
+    expect(decide(report.checks)).toBe(report.decision);
     const xml = renderJUnit(report);
-    expect(xml).toContain('tests="5" failures="1" errors="1" skipped="2"');
+    expect(xml).toContain(
+      '<property name="deployWitness.decision" value="FAIL"/>',
+    );
+    expect(xml).toContain('tests="7" failures="2" errors="2" skipped="2"');
     expect(xml).toContain("Commit &lt;expected&gt; &amp; &quot;observed&quot;");
     expect(xml).toContain('<failure type="DEPLOYMENT_SHA_MISMATCH"');
     expect(xml).toContain('<error type="UNKNOWN"');
     expect(xml).toContain('<skipped message="WARN: Optional check failed."');
+    expect(xml).toContain('<failure type="REQUIRED_CHECK_WARNING"');
+    expect(xml).toContain(
+      '<skipped message="FAIL: Optional check failed without affecting the decision."',
+    );
   });
 });

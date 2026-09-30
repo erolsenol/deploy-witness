@@ -7,6 +7,10 @@ import {
   loadConfig,
   loadConfigDetails,
 } from "./config/load.js";
+import {
+  createPublicJsonSchema,
+  type PublicSchemaName,
+} from "./contracts/json-schema.js";
 import { runVerification } from "./core/verify.js";
 import { renderJUnit } from "./reporters/junit.js";
 
@@ -56,6 +60,33 @@ configCommand
           : "CONFIG_INVALID: Configuration could not be validated.",
       );
       process.exitCode = 2;
+    }
+  });
+
+program
+  .command("schema")
+  .description("Print or write a public JSON Schema contract.")
+  .argument("<name>", "schema name: config or report")
+  .option("-o, --output <path>", "write JSON Schema to a file")
+  .action(async (name: string, options: { output?: string }) => {
+    if (name !== "config" && name !== "report") {
+      console.error("SCHEMA_NAME_INVALID: Choose config or report.");
+      process.exitCode = 2;
+      return;
+    }
+    const schema = `${JSON.stringify(createPublicJsonSchema(name as PublicSchemaName), null, 2)}\n`;
+    if (options.output) {
+      try {
+        await writeFile(options.output, schema, {
+          encoding: "utf8",
+          mode: 0o644,
+        });
+      } catch {
+        console.error("SCHEMA_WRITE_FAILED: Schema file could not be written.");
+        process.exitCode = 2;
+      }
+    } else {
+      process.stdout.write(schema);
     }
   });
 
