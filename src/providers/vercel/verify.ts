@@ -285,11 +285,20 @@ export async function verifyVercelDeployment(
   while (now() < deadline) {
     const remainingMs = deadline - now();
     try {
-      const deployments = await client.listDeployments(
+      const pageResult = await client.listDeployments(
         options.config.vercel.target,
         remainingMs,
       );
       lastObservedAt = new Date(now()).toISOString();
+      if (!pageResult.complete) {
+        return incompleteDeployment(
+          lastObservedAt,
+          startedAt,
+          "DEPLOYMENT_PAGINATION_LIMIT",
+          "Vercel deployment history exceeded the bounded page or time limit.",
+        );
+      }
+      const deployments = pageResult.deployments;
       if (deployments.length === 0) {
         await sleep(
           Math.min(

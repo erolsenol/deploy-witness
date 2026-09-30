@@ -336,14 +336,39 @@ export async function verifyCoolifyDeployment(
     if (remainingBeforeRequest <= 0) break;
     attempts += 1;
     try {
-      const deployments = await client.listApplicationDeployments(
-        0,
-        20,
+      const pageResult = await client.listRecentApplicationDeployments(
         remainingBeforeRequest,
+        now,
       );
       apiObservedAt = new Date(now()).toISOString();
-      lastDeployment = newestDeployment(deployments);
-      unorderableDeploymentFound = deployments.length > 0 && !lastDeployment;
+      if (!pageResult.complete) {
+        return [
+          check(
+            "provider.coolify-api",
+            "PASS",
+            "Coolify deployment API responded successfully.",
+            [
+              {
+                source: "coolify",
+                observedAt: apiObservedAt,
+                field: "resourceUuid",
+                observed: options.resourceUuid,
+              },
+            ],
+          ),
+          ...deploymentChecks(
+            undefined,
+            options.expectedSha,
+            apiObservedAt,
+            true,
+            true,
+            minimumCreatedAt,
+          ),
+        ];
+      }
+      lastDeployment = newestDeployment(pageResult.deployments);
+      unorderableDeploymentFound =
+        pageResult.deployments.length > 0 && !lastDeployment;
       lastError = undefined;
       consecutiveTransientFailures = 0;
 

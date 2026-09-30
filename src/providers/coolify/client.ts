@@ -36,6 +36,14 @@ export interface CoolifyClientOptions {
   readonly timeoutMs?: number;
 }
 
+export interface CoolifyDeploymentPages {
+  readonly deployments: readonly CoolifyDeployment[];
+  readonly complete: boolean;
+}
+
+export const DEPLOYMENT_PAGE_SIZE = 20;
+export const MAX_DEPLOYMENT_PAGES = 5;
+
 function parseBaseUrl(raw: string): URL {
   let url: URL;
   try {
@@ -133,5 +141,28 @@ export class CoolifyClient {
     const parsed = CoolifyDeploymentListSchema.safeParse(body);
     if (!parsed.success) throw new CoolifyApiError("COOLIFY_RESPONSE_INVALID");
     return parsed.data;
+  }
+
+  async listRecentApplicationDeployments(
+    timeoutMs = this.#timeoutMs,
+    now: () => number = Date.now,
+  ): Promise<CoolifyDeploymentPages> {
+    const deadline = now() + timeoutMs;
+    const deployments: CoolifyDeployment[] = [];
+
+    for (let page = 0; page < MAX_DEPLOYMENT_PAGES; page += 1) {
+      const remainingMs = deadline - now();
+      if (remainingMs <= 0) return { deployments, complete: false };
+      const records = await this.listApplicationDeployments(
+        page * DEPLOYMENT_PAGE_SIZE,
+        DEPLOYMENT_PAGE_SIZE,
+        remainingMs,
+      );
+      deployments.push(...records);
+      if (records.length < DEPLOYMENT_PAGE_SIZE)
+        return { deployments, complete: true };
+    }
+
+    return { deployments, complete: false };
   }
 }

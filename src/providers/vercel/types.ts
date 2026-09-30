@@ -11,6 +11,11 @@ export const VercelDeploymentListSchema = z.object({
       created: NumericTimestampSchema,
     }),
   ),
+  pagination: z
+    .object({
+      next: z.union([z.number(), z.string()]).nullable(),
+    })
+    .optional(),
 });
 
 export const VercelDeploymentDetailSchema = z.object({

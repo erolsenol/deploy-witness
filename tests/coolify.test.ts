@@ -73,6 +73,36 @@ describe("Coolify API client", () => {
     );
   });
 
+  it("collects complete bounded pages and stops on the short final page", async () => {
+    const offsets: string[] = [];
+    const client = new CoolifyClient({
+      baseUrl: "https://coolify.example.test",
+      resourceUuid: "resource-1",
+      token: "read-only-token",
+      fetchImpl: async (input) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input.toString(),
+        );
+        offsets.push(url.searchParams.get("skip") ?? "");
+        const skip = Number(url.searchParams.get("skip"));
+        const page = Array.from({ length: skip === 0 ? 20 : 2 }, (_, index) =>
+          deployment(
+            "finished",
+            sha,
+            new Date(Date.UTC(2026, 8, 30, 9, index + skip)).toISOString(),
+          ),
+        );
+        return Response.json(page);
+      },
+    });
+
+    const result = await client.listRecentApplicationDeployments(10_000);
+
+    expect(offsets).toEqual(["0", "20"]);
+    expect(result.deployments).toHaveLength(22);
+    expect(result.complete).toBe(true);
+  });
+
   it("rejects insecure non-local provider URLs", () => {
     expect(
       () =>
@@ -250,6 +280,38 @@ describe("Coolify deployment verification", () => {
           deployment("finished", "b".repeat(40), "2026-09-30T09:00:00Z"),
         ]),
     });
+    expect(
+      checks.find((item) => item.id === "deployment.status"),
+    ).toMatchObject({
+      status: "UNKNOWN",
+      failureCode: "DEPLOYMENT_ORDER_UNCERTAIN",
+    });
+  });
+
+  it("fails closed when the bounded deployment history is still full", async () => {
+    let calls = 0;
+    const checks = await verifyCoolifyDeployment({
+      baseUrl: "https://coolify.example.test",
+      resourceUuid: "resource-1",
+      token: "token",
+      expectedSha: sha,
+      timeoutSeconds: 30,
+      pollIntervalSeconds: 1,
+      fetchImpl: async () => {
+        calls += 1;
+        return Response.json(
+          Array.from({ length: 20 }, (_, index) =>
+            deployment(
+              "finished",
+              sha,
+              new Date(Date.UTC(2026, 8, 30, 9, calls, index)).toISOString(),
+            ),
+          ),
+        );
+      },
+    });
+
+    expect(calls).toBe(5);
     expect(
       checks.find((item) => item.id === "deployment.status"),
     ).toMatchObject({
