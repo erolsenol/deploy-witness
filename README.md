@@ -16,6 +16,7 @@ DeployWitness verifies; it does not deploy, roll back, run migrations, or change
 - Optional stability checks can require several consecutive successful responses after the deployment.
 - Every check is reported separately, with missing or unknown evidence kept visible.
 - Provider capabilities are reported as `SUPPORTED`, `UNSUPPORTED`, or `UNAVAILABLE` for this run, so consumers can distinguish missing support from an inaccessible provider API.
+- Coolify and Vercel status, commit, target, and freshness evidence is evaluated by one shared decision module after each adapter normalizes provider data.
 
 An HTTP 200 alone does not prove that the requested commit is live. Add a version endpoint or response header if you need an independent runtime commit check.
 

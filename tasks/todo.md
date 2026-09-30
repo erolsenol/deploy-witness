@@ -1,6 +1,6 @@
 # DeployWitness — Uygulama Görev Listesi
 
-> Progress update (2026-09-30): v0.1 MVP remains public. Completed the Vercel adapter for project/team-scoped production and preview deployment lookup, readiness-state checks, full Git SHA comparison, and freshness correlation. The report now exposes provider capabilities as supported, unsupported, or unavailable. Coolify and Vercel deployment history use bounded pagination and fail closed when the page/time bound prevents confident ordering. Dedicated authenticated provider staging E2E and npm registry publication remain separate roadmap items.
+> Progress update (2026-09-30): v0.1 MVP remains public. Completed the Vercel adapter for project/team-scoped production and preview deployment lookup, readiness-state checks, full Git SHA comparison, and freshness correlation. The report exposes provider capabilities as supported, unsupported, or unavailable. Both provider adapters normalize lifecycle, commit, and freshness evidence into one shared deployment evaluator. Bounded pagination fails closed when page/time limits prevent confident ordering. Dedicated authenticated provider staging E2E and npm registry publication remain separate roadmap items.
 
 Bu liste plan onaylandıktan sonra uygulama sırasıdır. Her görev ayrı ve gözden geçirilebilir bir dilim olarak bitirilir; geniş görevler alt görevlere bölünür.
 
@@ -315,7 +315,7 @@ Detaylı mimari, scope, güvenlik modeli ve release kapıları [`tasks/plan.md`]
 **Kabul ölçütleri:**
 - [x] Capability support/unsupported/unavailable açıkça raporlanır.
 - [ ] Her adapter aynı unknown, stale, wrong SHA/resource ve auth senaryolarını geçirir.
-- [ ] Adapter karar motoru içermez; yalnızca provider verisini normalize eder.
+- [x] Adapter karar motoru içermez; yalnızca provider verisini normalize eder.
 
 **İlerleme:** `tests/provider-contract.test.ts` Coolify ve Vercel için başarı, SHA uyuşmazlığı, bilinmeyen durum, eksik commit, stale deployment ve auth/redaction senaryolarını aynı kabul kurallarıyla çalıştırıyor. Provider testleri Coolify skip/take sayfalarını, Vercel `pagination.next`/`until` cursor'unu, rate-limit ve secret redaction davranışını doğruluyor. Vercel detayında eksik project identity artık UNKNOWN, başka project ID ise FAIL. Rapor seviyesinde capability inventory eklendi; API erişilemezse desteklenen capability `UNAVAILABLE` raporlanıyor.
 

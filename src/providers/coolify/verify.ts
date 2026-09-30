@@ -1,4 +1,5 @@
 import type { CheckResult } from "../../contracts/index.js";
+import { evaluateDeploymentEvidence } from "../deployment-evidence.js";
 import { CoolifyApiError, CoolifyClient } from "./client.js";
 import type { CoolifyDeployment } from "./types.js";
 import {
@@ -97,126 +98,26 @@ function deploymentChecks(
   const rawStatus = deployment.status;
   const sha = deploymentSha(deployment);
   const createdAt = deploymentTimestamp(deployment);
-  const providerStatus = normalizeStatus(rawStatus);
-  const statusEvidence = rawStatus
-    ? [{ source: "coolify", observedAt, field: "status", observed: rawStatus }]
-    : [];
-  const commitEvidence = sha
-    ? [
-        {
-          source: "coolify",
-          observedAt,
-          field: "commit",
-          expected: expectedSha,
-          observed: sha,
-        },
-      ]
-    : [];
-
-  const statusCheck =
-    providerStatus === "success"
-      ? check(
-          "deployment.status",
-          "PASS",
-          "Coolify reports a successful terminal deployment.",
-          statusEvidence,
-        )
-      : providerStatus === "failure"
-        ? check(
-            "deployment.status",
-            "FAIL",
-            "Coolify reports a failed or cancelled deployment.",
-            statusEvidence,
-            "DEPLOYMENT_FAILED",
-          )
-        : providerStatus === "pending"
-          ? check(
-              "deployment.status",
-              "UNKNOWN",
-              "The latest Coolify deployment is still in progress.",
-              statusEvidence,
-              "DEPLOYMENT_PENDING",
-            )
-          : check(
-              "deployment.status",
-              "UNKNOWN",
-              "Coolify returned a deployment status DeployWitness does not recognize.",
-              statusEvidence,
-              "DEPLOYMENT_STATUS_UNKNOWN",
-            );
-
-  const commitCheck = !sha
-    ? check(
-        "deployment.commit",
-        "UNKNOWN",
-        "Coolify did not provide a deployment commit SHA.",
-        [],
-        "DEPLOYMENT_COMMIT_MISSING",
-      )
-    : sha.toLowerCase() === expectedSha.toLowerCase()
-      ? check(
-          "deployment.commit",
-          "PASS",
-          "The latest deployment commit exactly matches the expected SHA.",
-          commitEvidence,
-        )
-      : check(
-          "deployment.commit",
-          "FAIL",
-          "The latest deployment commit does not match the expected SHA.",
-          commitEvidence,
-          "DEPLOYMENT_SHA_MISMATCH",
-        );
-
-  const freshnessCheck =
-    minimumCreatedAt === undefined
-      ? check(
-          "deployment.freshness",
-          "WARN",
-          "No run-start boundary was supplied; this deployment cannot be correlated to the current CI run.",
-          [
-            {
-              source: "coolify",
-              observedAt,
-              field: "createdAt",
-              observed: deployment.created_at ?? null,
-            },
-          ],
-          "DEPLOYMENT_RUN_CORRELATION_UNAVAILABLE",
-          false,
-        )
-      : createdAt <= minimumCreatedAt
-        ? check(
-            "deployment.freshness",
-            "FAIL",
-            "The latest deployment was not created strictly after the supplied run-start boundary.",
-            [
-              {
-                source: "coolify",
-                observedAt,
-                field: "createdAt",
-                expected: new Date(minimumCreatedAt).toISOString(),
-                observed: deployment.created_at ?? null,
-              },
-            ],
-            "DEPLOYMENT_STALE",
-          )
-        : check(
-            "deployment.freshness",
-            "PASS",
-            "The latest deployment was created after the supplied run-start boundary.",
-            [
-              {
-                source: "coolify",
-                observedAt,
-                field: "createdAt",
-                expected: new Date(minimumCreatedAt).toISOString(),
-                observed: deployment.created_at ?? null,
-              },
-            ],
-          );
-
-  return [statusCheck, commitCheck, freshnessCheck];
+  return evaluateDeploymentEvidence({
+    deployment: {
+      provider: "coolify",
+      status: normalizeStatus(rawStatus),
+      ...(rawStatus !== undefined ? { rawStatus } : {}),
+      statusField: "status",
+      ...(sha !== undefined ? { commitSha: sha } : {}),
+      commitField: deployment.git_commit_sha ? "git_commit_sha" : "commit",
+      ...(Number.isFinite(createdAt) ? { createdAt } : {}),
+      createdAtField: "created_at",
+      pendingStatusCode: "DEPLOYMENT_PENDING",
+      unknownStatusCode: "DEPLOYMENT_STATUS_UNKNOWN",
+    },
+    expectedSha,
+    ...(minimumCreatedAt !== undefined
+      ? { startedAfter: new Date(minimumCreatedAt).toISOString() }
+      : {}),
+    observedAt,
+    startedAt: Date.parse(observedAt),
+  });
 }
 
 const defaultSleep = (milliseconds: number): Promise<void> =>
