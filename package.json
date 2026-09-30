@@ -35,7 +35,8 @@
     "schema:generate": "tsx scripts/generate-schemas.ts",
     "schema:check": "tsx scripts/generate-schemas.ts --check",
     "clean": "node -e \"import('node:fs').then(({rmSync}) => rmSync('dist', {recursive: true, force: true}))\"",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "prepare": "husky"
   },
   "dependencies": {
     "@actions/core": "^3.0.1",
@@ -47,6 +48,7 @@
     "@biomejs/biome": "^2.5.14",
     "@types/node": "^26.6.3",
     "@vercel/ncc": "^0.45.0",
+    "husky": "^9.1.7",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.2"

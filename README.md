@@ -112,10 +112,14 @@ See [SECURITY.md](SECURITY.md), [the architecture and roadmap](docs/plan.md), an
 ## Development
 
     npm ci
-    npm run typecheck
-    npm test
-    npm run lint
-    npm run build
+
+Husky installs the local Git hooks during `npm ci`. Before each commit, the
+`pre-commit` hook runs lint and checks that the committed JSON schemas match the
+source contracts. Before each push, the `pre-push` hook runs the complete
+quality gate: lint, schema check, typecheck, tests, build, and package dry run.
+If a check fails, Git stops the commit or push. Run these commands manually with
+`npm run lint`, `npm run schema:check`, `npm run typecheck`, `npm test`,
+`npm run build`, and `npm pack --dry-run` when needed.
 
 ## License
 

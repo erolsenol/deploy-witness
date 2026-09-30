@@ -314,10 +314,10 @@ Detaylı mimari, scope, güvenlik modeli ve release kapıları [`tasks/plan.md`]
 
 **Kabul ölçütleri:**
 - [x] Capability support/unsupported/unavailable açıkça raporlanır.
-- [ ] Her adapter aynı unknown, stale, wrong SHA/resource ve auth senaryolarını geçirir.
+- [x] Her adapter aynı unknown, stale, wrong SHA/resource ve auth senaryolarını geçirir.
 - [x] Adapter karar motoru içermez; yalnızca provider verisini normalize eder.
 
-**İlerleme:** `tests/provider-contract.test.ts` Coolify ve Vercel için başarı, SHA uyuşmazlığı, bilinmeyen durum, eksik commit, stale deployment ve auth/redaction senaryolarını aynı kabul kurallarıyla çalıştırıyor. Provider testleri Coolify skip/take sayfalarını, Vercel `pagination.next`/`until` cursor'unu, rate-limit ve secret redaction davranışını doğruluyor. Vercel detayında eksik project identity artık UNKNOWN, başka project ID ise FAIL. Rapor seviyesinde capability inventory eklendi; API erişilemezse desteklenen capability `UNAVAILABLE` raporlanıyor.
+**İlerleme:** `tests/provider-contract.test.ts` Coolify ve Vercel için başarı, SHA uyuşmazlığı, bilinmeyen durum, eksik commit, stale deployment, configured resource scope ve auth/redaction senaryolarını aynı kabul suite’inde çalıştırıyor. Coolify resource UUID’yi route seviyesinde uygular; Vercel farklı project ID dönerse FAIL verir. Provider testleri Coolify skip/take sayfalarını, Vercel `pagination.next`/`until` cursor'unu, rate-limit ve secret redaction davranışını doğruluyor. Rapor seviyesinde capability inventory eklendi; API erişilemezse desteklenen capability `UNAVAILABLE` raporlanıyor. Her iki adapter ortak deployment evidence evaluator’ını kullanıyor.
 
 **Doğrulama:** Ortak fixture suite’i iki adapter’da aynı karar kurallarını doğrular; fixture’lar test içinde sentetik HTTP yanıtlarıdır, gerçek provider E2E değildir.
 **Bağımlılık:** DW-R01, DW-R02.
