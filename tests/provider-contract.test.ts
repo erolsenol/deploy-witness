@@ -40,7 +40,7 @@ function config(provider: ProviderName): VerificationConfig {
 
 function providerResponse(
   provider: ProviderName,
-  values: { status?: string; sha?: string },
+  values: { status?: string; sha?: string; projectId?: string },
 ): typeof fetch {
   return async (input) => {
     const url = new URL(
@@ -62,7 +62,7 @@ function providerResponse(
       });
     return Response.json({
       id: "dpl_contract",
-      projectId: "prj_contract",
+      projectId: values.projectId ?? "prj_contract",
       readyState: values.status ?? "READY",
       target: "production",
       createdAt,
@@ -77,6 +77,7 @@ describe.each(["coolify", "vercel"] as const)(
     async function verify(values: {
       status?: string;
       sha?: string;
+      projectId?: string;
       startedAfter?: string;
     }) {
       return runVerification({
@@ -107,6 +108,41 @@ describe.each(["coolify", "vercel"] as const)(
       ).toMatchObject({
         status: "FAIL",
         failureCode: "DEPLOYMENT_SHA_MISMATCH",
+      });
+    });
+
+    it("enforces configured resource identity at the provider boundary", async () => {
+      if (provider === "coolify") {
+        let requestedUrl: URL | undefined;
+        const report = await runVerification({
+          config: config(provider),
+          token: "provider-contract-token",
+          expectedSha,
+          fetchImpl: async (input) => {
+            requestedUrl = new URL(
+              input instanceof Request ? input.url : input.toString(),
+            );
+            return providerResponse(provider, { sha: expectedSha })(input);
+          },
+        });
+
+        expect(requestedUrl?.pathname).toBe(
+          "/api/v1/deployments/applications/application-contract",
+        );
+        expect(report.decision).toBe("PASS");
+        return;
+      }
+
+      const report = await verify({
+        sha: expectedSha,
+        projectId: "prj_other",
+      });
+      expect(report.decision).toBe("FAIL");
+      expect(
+        report.checks.find((check) => check.id === "deployment.status"),
+      ).toMatchObject({
+        status: "FAIL",
+        failureCode: "VERCEL_PROJECT_MISMATCH",
       });
     });
 
