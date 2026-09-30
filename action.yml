@@ -1,0 +1,26 @@
+name: DeployWitness
+description: Verify the deployed commit and runtime probes using read-only evidence.
+author: Erol Senol
+inputs:
+  config:
+    description: Path to deploy-witness YAML configuration.
+    required: true
+    default: deploy-witness.yml
+  coolify-token:
+    description: Read-only Coolify API token.
+    required: true
+  expected-sha:
+    description: Expected full commit SHA; defaults to config or GITHUB_SHA.
+    required: false
+  report-path:
+    description: JSON evidence output path.
+    required: false
+    default: deploy-witness-report.json
+outputs:
+  decision:
+    description: PASS, FAIL, or INCOMPLETE.
+  report-path:
+    description: Path to the JSON evidence report.
+runs:
+  using: node24
+  main: dist/action-bundle/index.js
