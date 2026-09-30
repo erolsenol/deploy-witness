@@ -15,6 +15,11 @@ const CAPABILITIES: Record<
       reason: "The adapter reads application deployment records.",
     },
     {
+      name: "deployment.pagination",
+      reason:
+        "The adapter requests bounded deployment pages using skip and take.",
+    },
+    {
       name: "deployment.resource-scope",
       reason: "The application UUID scopes the deployment request.",
     },
@@ -37,6 +42,11 @@ const CAPABILITIES: Record<
       name: "deployment.lookup",
       reason:
         "The adapter reads deployment records for the configured project.",
+    },
+    {
+      name: "deployment.pagination",
+      reason:
+        "The adapter follows Vercel's next cursor within a bounded page and time limit.",
     },
     {
       name: "deployment.resource-scope",

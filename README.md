@@ -62,6 +62,8 @@ For Vercel, use `node dist/cli.js init --provider vercel`, provide the project I
 
 The Vercel adapter uses the official [deployment list endpoint](https://vercel.com/docs/rest-api/deployments/list-deployments) scoped by project and target, then the [deployment detail endpoint](https://vercel.com/docs/rest-api/deployments/get-a-deployment-by-id-or-url) with `withGitRepoInfo=true`. Vercel represents preview deployment `target` as `null`; DeployWitness normalizes that documented value to `preview`.
 
+Deployment history is read in bounded pages: Coolify uses its documented [`skip`/`take` pagination](https://coolify.io/docs/api/endpoints/deployments/list-deployments-by-app-uuid), and Vercel follows the documented [`pagination.next` cursor](https://vercel.com/docs/rest-api/deployments/list-deployments) with `until`. The scan stops after five pages or the verification deadline. If that bound is reached before history is complete, deployment ordering is reported as unknown and verification cannot pass on incomplete history.
+
 ## JSON Schema contracts
 
 The versioned config and report schemas live in [`schemas/`](schemas/). Regenerate them after changing the Zod contracts with `npm run schema:generate`; CI checks that the committed schemas stay synchronized. You can also print a schema for tooling with `node dist/cli.js schema config` or `node dist/cli.js schema report`. JSON Schema documents structural constraints; run `config validate` for DeployWitness-specific semantic and security validation before using a configuration.

@@ -50284,6 +50284,10 @@ const CAPABILITIES = {
             reason: "The adapter reads application deployment records.",
         },
         {
+            name: "deployment.pagination",
+            reason: "The adapter requests bounded deployment pages using skip and take.",
+        },
+        {
             name: "deployment.resource-scope",
             reason: "The application UUID scopes the deployment request.",
         },
@@ -50304,6 +50308,10 @@ const CAPABILITIES = {
         {
             name: "deployment.lookup",
             reason: "The adapter reads deployment records for the configured project.",
+        },
+        {
+            name: "deployment.pagination",
+            reason: "The adapter follows Vercel's next cursor within a bounded page and time limit.",
         },
         {
             name: "deployment.resource-scope",
@@ -50398,6 +50406,8 @@ function parseRetryAfter(value, nowMs = Date.now()) {
         return undefined;
     return Math.max(0, retryAt - nowMs);
 }
+const DEPLOYMENT_PAGE_SIZE = 20;
+const MAX_DEPLOYMENT_PAGES = 5;
 function parseBaseUrl(raw) {
     let url;
     try {
@@ -50476,6 +50486,20 @@ class CoolifyClient {
         if (!parsed.success)
             throw new CoolifyApiError("COOLIFY_RESPONSE_INVALID");
         return parsed.data;
+    }
+    async listRecentApplicationDeployments(timeoutMs = this.#timeoutMs, now = Date.now) {
+        const deadline = now() + timeoutMs;
+        const deployments = [];
+        for (let page = 0; page < MAX_DEPLOYMENT_PAGES; page += 1) {
+            const remainingMs = deadline - now();
+            if (remainingMs <= 0)
+                return { deployments, complete: false };
+            const records = await this.listApplicationDeployments(page * DEPLOYMENT_PAGE_SIZE, DEPLOYMENT_PAGE_SIZE, remainingMs);
+            deployments.push(...records);
+            if (records.length < DEPLOYMENT_PAGE_SIZE)
+                return { deployments, complete: true };
+        }
+        return { deployments, complete: false };
     }
 }
 //# sourceMappingURL=client.js.map
@@ -50661,10 +50685,24 @@ async function verifyCoolifyDeployment(options) {
             break;
         attempts += 1;
         try {
-            const deployments = await client.listApplicationDeployments(0, 20, remainingBeforeRequest);
+            const pageResult = await client.listRecentApplicationDeployments(remainingBeforeRequest, now);
             apiObservedAt = new Date(now()).toISOString();
-            lastDeployment = newestDeployment(deployments);
-            unorderableDeploymentFound = deployments.length > 0 && !lastDeployment;
+            if (!pageResult.complete) {
+                return [
+                    verify_check("provider.coolify-api", "PASS", "Coolify deployment API responded successfully.", [
+                        {
+                            source: "coolify",
+                            observedAt: apiObservedAt,
+                            field: "resourceUuid",
+                            observed: options.resourceUuid,
+                        },
+                    ]),
+                    ...deploymentChecks(undefined, options.expectedSha, apiObservedAt, true, true, minimumCreatedAt),
+                ];
+            }
+            lastDeployment = newestDeployment(pageResult.deployments);
+            unorderableDeploymentFound =
+                pageResult.deployments.length > 0 && !lastDeployment;
             lastError = undefined;
             consecutiveTransientFailures = 0;
             if (unorderableDeploymentFound)
@@ -50726,6 +50764,10 @@ const VercelDeploymentListSchema = object({
         createdAt: NumericTimestampSchema,
         created: NumericTimestampSchema,
     })),
+    pagination: object({
+        next: union([schemas_number(), schemas_string()]).nullable(),
+    })
+        .optional(),
 });
 const VercelDeploymentDetailSchema = object({
     id: schemas_string(),
@@ -50751,6 +50793,8 @@ function vercelTimestamp(deployment) {
 ;// CONCATENATED MODULE: ./dist/providers/vercel/client.js
 
 const API_BASE_URL = "https://api.vercel.com";
+const client_DEPLOYMENT_PAGE_SIZE = 20;
+const client_MAX_DEPLOYMENT_PAGES = 5;
 class VercelApiError extends Error {
     code;
     status;
@@ -50811,16 +50855,38 @@ class VercelClient {
         return payload;
     }
     async listDeployments(target, timeoutMs) {
-        const url = new URL("/v7/deployments", API_BASE_URL);
-        url.searchParams.set("projectId", this.options.projectId);
-        url.searchParams.set("target", target);
-        url.searchParams.set("limit", "20");
-        if (this.options.teamId)
-            url.searchParams.set("teamId", this.options.teamId);
-        const payload = VercelDeploymentListSchema.safeParse(await this.getJson(url, timeoutMs));
-        if (!payload.success)
-            throw new VercelApiError("VERCEL_RESPONSE_INVALID");
-        return payload.data.deployments;
+        const deadline = Date.now() + timeoutMs;
+        const deployments = [];
+        const cursors = new Set();
+        let until;
+        for (let page = 0; page < client_MAX_DEPLOYMENT_PAGES; page += 1) {
+            const remainingMs = deadline - Date.now();
+            if (remainingMs <= 0)
+                return { deployments, complete: false };
+            const url = new URL("/v7/deployments", API_BASE_URL);
+            url.searchParams.set("projectId", this.options.projectId);
+            url.searchParams.set("target", target);
+            url.searchParams.set("limit", String(client_DEPLOYMENT_PAGE_SIZE));
+            if (this.options.teamId)
+                url.searchParams.set("teamId", this.options.teamId);
+            if (until)
+                url.searchParams.set("until", until);
+            const payload = VercelDeploymentListSchema.safeParse(await this.getJson(url, remainingMs));
+            if (!payload.success)
+                throw new VercelApiError("VERCEL_RESPONSE_INVALID");
+            deployments.push(...payload.data.deployments);
+            const next = payload.data.pagination?.next;
+            if (next === undefined || next === null) {
+                const complete = payload.data.pagination !== undefined ||
+                    payload.data.deployments.length < client_DEPLOYMENT_PAGE_SIZE;
+                return { deployments, complete };
+            }
+            until = String(next);
+            if (cursors.has(until))
+                throw new VercelApiError("VERCEL_CURSOR_REPEATED");
+            cursors.add(until);
+        }
+        return { deployments, complete: false };
     }
     async getDeployment(id, timeoutMs) {
         const url = new URL(`/v13/deployments/${encodeURIComponent(id)}`, API_BASE_URL);
@@ -50970,8 +51036,12 @@ async function verifyVercelDeployment(options) {
     while (now() < deadline) {
         const remainingMs = deadline - now();
         try {
-            const deployments = await client.listDeployments(options.config.vercel.target, remainingMs);
+            const pageResult = await client.listDeployments(options.config.vercel.target, remainingMs);
             lastObservedAt = new Date(now()).toISOString();
+            if (!pageResult.complete) {
+                return incompleteDeployment(lastObservedAt, startedAt, "DEPLOYMENT_PAGINATION_LIMIT", "Vercel deployment history exceeded the bounded page or time limit.");
+            }
+            const deployments = pageResult.deployments;
             if (deployments.length === 0) {
                 await sleep(Math.min(options.config.deployment.pollIntervalSeconds * 1000, Math.max(1, deadline - now())));
                 continue;

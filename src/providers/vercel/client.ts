@@ -6,6 +6,13 @@ import {
 } from "./types.js";
 
 const API_BASE_URL = "https://api.vercel.com";
+const DEPLOYMENT_PAGE_SIZE = 20;
+const MAX_DEPLOYMENT_PAGES = 5;
+
+export interface VercelDeploymentPages {
+  readonly deployments: readonly VercelDeploymentSummary[];
+  readonly complete: boolean;
+}
 
 export class VercelApiError extends Error {
   constructor(
@@ -74,18 +81,44 @@ export class VercelClient {
   async listDeployments(
     target: "production" | "preview",
     timeoutMs: number,
-  ): Promise<readonly VercelDeploymentSummary[]> {
-    const url = new URL("/v7/deployments", API_BASE_URL);
-    url.searchParams.set("projectId", this.options.projectId);
-    url.searchParams.set("target", target);
-    url.searchParams.set("limit", "20");
-    if (this.options.teamId)
-      url.searchParams.set("teamId", this.options.teamId);
-    const payload = VercelDeploymentListSchema.safeParse(
-      await this.getJson(url, timeoutMs),
-    );
-    if (!payload.success) throw new VercelApiError("VERCEL_RESPONSE_INVALID");
-    return payload.data.deployments;
+  ): Promise<VercelDeploymentPages> {
+    const deadline = Date.now() + timeoutMs;
+    const deployments: VercelDeploymentSummary[] = [];
+    const cursors = new Set<string>();
+    let until: string | undefined;
+
+    for (let page = 0; page < MAX_DEPLOYMENT_PAGES; page += 1) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) return { deployments, complete: false };
+
+      const url = new URL("/v7/deployments", API_BASE_URL);
+      url.searchParams.set("projectId", this.options.projectId);
+      url.searchParams.set("target", target);
+      url.searchParams.set("limit", String(DEPLOYMENT_PAGE_SIZE));
+      if (this.options.teamId)
+        url.searchParams.set("teamId", this.options.teamId);
+      if (until) url.searchParams.set("until", until);
+
+      const payload = VercelDeploymentListSchema.safeParse(
+        await this.getJson(url, remainingMs),
+      );
+      if (!payload.success) throw new VercelApiError("VERCEL_RESPONSE_INVALID");
+      deployments.push(...payload.data.deployments);
+
+      const next = payload.data.pagination?.next;
+      if (next === undefined || next === null) {
+        const complete =
+          payload.data.pagination !== undefined ||
+          payload.data.deployments.length < DEPLOYMENT_PAGE_SIZE;
+        return { deployments, complete };
+      }
+      until = String(next);
+      if (cursors.has(until))
+        throw new VercelApiError("VERCEL_CURSOR_REPEATED");
+      cursors.add(until);
+    }
+
+    return { deployments, complete: false };
   }
 
   async getDeployment(

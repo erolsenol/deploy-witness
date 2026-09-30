@@ -110,6 +110,12 @@ describe("verification orchestration", () => {
         status: "SUPPORTED",
       }),
     );
+    expect(report.capabilities).toContainEqual(
+      expect.objectContaining({
+        name: "deployment.pagination",
+        status: "SUPPORTED",
+      }),
+    );
     expect(report.checks.map((check) => check.id)).toEqual([
       "provider.vercel-api",
       "deployment.status",

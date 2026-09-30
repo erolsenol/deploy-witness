@@ -61,6 +61,99 @@ describe("Vercel deployment adapter", () => {
     expect(requests[1]?.url.searchParams.get("withGitRepoInfo")).toBe("true");
   });
 
+  it("follows the Vercel pagination cursor with the until parameter", async () => {
+    const requests: URL[] = [];
+    const client = new VercelClient({
+      projectId: "prj_demo",
+      token: "read-only-token",
+      fetchImpl: async (input) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input.toString(),
+        );
+        requests.push(url);
+        return Response.json({
+          deployments: [
+            {
+              uid: `dpl_${requests.length}`,
+              createdAt: 1_800_000_000_000 - requests.length,
+            },
+          ],
+          pagination: {
+            next: requests.length === 1 ? 1_700_000_000_000 : null,
+          },
+        });
+      },
+    });
+
+    const result = await client.listDeployments("production", 10_000);
+
+    expect(requests).toHaveLength(2);
+    expect(requests[0]?.searchParams.get("until")).toBeNull();
+    expect(requests[1]?.searchParams.get("until")).toBe("1700000000000");
+    expect(result.deployments).toHaveLength(2);
+    expect(result.complete).toBe(true);
+  });
+
+  it("marks history incomplete when the bounded page limit still has a next cursor", async () => {
+    const requests: URL[] = [];
+    const client = new VercelClient({
+      projectId: "prj_demo",
+      token: "read-only-token",
+      fetchImpl: async (input) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input.toString(),
+        );
+        requests.push(url);
+        return Response.json({
+          deployments: [
+            {
+              uid: `dpl_${requests.length}`,
+              createdAt: 1_800_000_000_000 - requests.length,
+            },
+          ],
+          pagination: { next: 1_700_000_000_000 - requests.length },
+        });
+      },
+    });
+
+    const result = await client.listDeployments("production", 10_000);
+
+    expect(requests).toHaveLength(5);
+    expect(result.complete).toBe(false);
+  });
+
+  it("does not verify deployment identity from history beyond the page bound", async () => {
+    const requests: URL[] = [];
+    const checks = await verifyVercelDeployment({
+      config: vercelConfig(),
+      token: "read-only-token",
+      expectedSha,
+      fetchImpl: async (input) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input.toString(),
+        );
+        requests.push(url);
+        return Response.json({
+          deployments: [
+            {
+              uid: `dpl_${requests.length}`,
+              createdAt: 1_800_000_000_000 - requests.length,
+            },
+          ],
+          pagination: { next: 1_700_000_000_000 - requests.length },
+        });
+      },
+    });
+
+    expect(requests).toHaveLength(5);
+    expect(
+      checks.find((check) => check.id === "deployment.status"),
+    ).toMatchObject({
+      status: "UNKNOWN",
+      failureCode: "DEPLOYMENT_PAGINATION_LIMIT",
+    });
+  });
+
   it("fails closed when Vercel rejects the token", async () => {
     const client = new VercelClient({
       projectId: "prj_demo",
