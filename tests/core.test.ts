@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { VerificationConfigSchema } from "../src/contracts/index.js";
 import { runVerification } from "../src/core/verify.js";
+import { TOOL_VERSION } from "../src/version.js";
 
 const expectedSha = "a".repeat(40);
 const config = VerificationConfigSchema.parse({
@@ -138,6 +139,7 @@ describe("verification orchestration", () => {
       fetchImpl: async () => coolifyResponse(),
     });
     expect(report.decision).toBe("PASS");
+    expect(report.toolVersion).toBe(TOOL_VERSION);
     expect(
       report.checks.find((check) => check.id === "deployment.freshness"),
     ).toMatchObject({

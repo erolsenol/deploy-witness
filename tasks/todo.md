@@ -1,6 +1,6 @@
 # DeployWitness — Uygulama Görev Listesi
 
-> Progress update (2026-09-30): v0.1 MVP remains public. Completed the Vercel adapter for project/team-scoped production and preview deployment lookup, readiness-state checks, full Git SHA comparison, and freshness correlation. The report exposes provider capabilities as supported, unsupported, or unavailable. Both provider adapters normalize lifecycle, commit, and freshness evidence into one shared deployment evaluator. Bounded pagination fails closed when page/time limits prevent confident ordering. Dedicated authenticated provider staging E2E and npm registry publication remain separate roadmap items.
+> Progress update (2026-10-01): v0.2.0 GitHub Release is public with config v2 image digest inputs, independent runtime digest markers, generated schemas, and Node 22/24 CI. A v0.2.1 fix aligns the CLI/report version with package metadata. npm registry publication remains pending initial package bootstrap and Trusted Publisher setup; authenticated provider staging E2E is still separate.
 
 Bu liste plan onaylandıktan sonra uygulama sırasıdır. Her görev ayrı ve gözden geçirilebilir bir dilim olarak bitirilir; geniş görevler alt görevlere bölünür.
 

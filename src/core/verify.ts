@@ -10,6 +10,7 @@ import { providerCapabilities } from "../providers/capabilities.js";
 import { verifyCoolifyDeployment } from "../providers/coolify/verify.js";
 import { evaluateImageDigestEvidence } from "../providers/deployment-evidence.js";
 import { verifyVercelDeployment } from "../providers/vercel/verify.js";
+import { TOOL_VERSION } from "../version.js";
 
 export interface RunVerificationOptions {
   readonly config: VerificationConfig;
@@ -155,7 +156,7 @@ export async function runVerification(
 
   return VerificationReportSchema.parse({
     schemaVersion: 1,
-    toolVersion: "0.1.0",
+    toolVersion: TOOL_VERSION,
     runId: randomUUID(),
     createdAt: new Date().toISOString(),
     expectedSha: options.expectedSha,

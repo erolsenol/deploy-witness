@@ -14,11 +14,12 @@ import {
 } from "./contracts/json-schema.js";
 import { runVerification } from "./core/verify.js";
 import { renderJUnit } from "./reporters/junit.js";
+import { TOOL_VERSION } from "./version.js";
 
 const program = new Command()
   .name("deploy-witness")
   .description("Verify that the expected commit is live after deployment.")
-  .version("0.1.0");
+  .version(TOOL_VERSION);
 const templates = {
   coolify: `version: 2\nprovider: coolify\ncoolify:\n  baseUrl: https://coolify.example.com\n  resourceUuid: replace-with-resource-uuid\ndeployment:\n  timeoutSeconds: 600\n  pollIntervalSeconds: 5\nprobes: []\n`,
   vercel: `version: 2\nprovider: vercel\nvercel:\n  projectId: replace-with-vercel-project-id\n  target: production\ndeployment:\n  timeoutSeconds: 600\n  pollIntervalSeconds: 5\nprobes: []\n`,
