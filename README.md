@@ -82,7 +82,7 @@ reviewed commit SHA.
 
 Provider tokens are secret inputs and are not part of config inspection or reports.
 
-For Vercel, use `node dist/cli.js init --provider vercel`, provide the project ID and target, and set `VERCEL_TOKEN`. Team projects may also set a team ID. DeployWitness lists only that project and target, then requests the deployment detail with Git repository information to compare its full commit SHA. The Vercel token is used only for read-only GET requests.
+For Vercel, use `deploy-witness init --provider vercel`, provide the project ID and target, and set `VERCEL_TOKEN`. Team projects may also set a team ID. DeployWitness lists only that project and target, then requests the deployment detail with Git repository information to compare its full commit SHA. The Vercel token is used only for read-only GET requests.
 
 To record an expected immutable OCI digest, use config v2's `deployment.expectedImageDigest`, pass `--expected-image-digest sha256:<64-hex-characters>` to the CLI, set `DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST`, or use the Action's `expected-image-digest` input. The order is CLI/Action input, environment, then config file. This validates the digest format and emits a required provider digest check. A config v2 probe can use `imageDigestJsonPath` to compare the same expectation with an app runtime marker without duplicating the digest value:
 
@@ -117,6 +117,8 @@ See the [report v1 evidence and freshness decision record](docs/adr/0001-evidenc
 
 JUnit output preserves the verification decision: required warnings and failures become failures, required unknown/unsupported/skipped checks become errors, and optional non-pass checks remain skipped so they do not turn an overall PASS into a failing CI result.
 
+For CI providers without GitHub Actions, see the [GitLab CI example](examples/gitlab-ci.yml) and its [setup notes](docs/ci-integrations.md).
+
 ## GitHub Actions
 
 The Action runs after your deploy step. Store the read-only provider token as a GitHub Actions secret and provide it through the matching Action input; never put the token in the config file.
@@ -129,7 +131,7 @@ The Action runs after your deploy step. Store the read-only provider token as a 
       run: echo "timestamp=$(node -p 'new Date().toISOString()')" >> "$GITHUB_OUTPUT"
 
     - name: Verify deployment
-      uses: erolsenol/deploy-witness@168d94079f1837b2a91fea69585b093f6781ca5a
+      uses: erolsenol/deploy-witness@a4c6de5d9baebb7e568691f5b5af7c34b9c941dc
       with:
         config: deploy-witness.yml
         coolify-token: ${{ secrets.COOLIFY_READ_ONLY_TOKEN }}
@@ -141,7 +143,7 @@ Coolify app, follow the [staging validation guide](docs/staging-validation.md).
 
 For Vercel, select a `provider: vercel` config and pass `vercel-token: ${{ secrets.VERCEL_READ_ONLY_TOKEN }}` instead. The Action masks either provider token before verification.
 
-Create a Coolify configuration with `node dist/cli.js init` or a Vercel configuration with `node dist/cli.js init --provider vercel`. Set the relevant project/resource identifier, target, timeout and probes in `deploy-witness.yml`. Run this step only in a trusted workflow that is allowed to access the provider token. Do not pass deployment secrets to untrusted fork pull requests.
+Create a Coolify configuration with `deploy-witness init` or a Vercel configuration with `deploy-witness init --provider vercel`. Set the relevant project/resource identifier, target, timeout and probes in `deploy-witness.yml`. Run this step only in a trusted workflow that is allowed to access the provider token. Do not pass deployment secrets to untrusted fork pull requests.
 
 ## Security and evidence boundaries
 
