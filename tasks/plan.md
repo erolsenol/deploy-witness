@@ -1,12 +1,12 @@
 # DeployWitness 0.2+ — Genişletilmiş Ürün ve Teknik Plan
 
-**Durum:** Uygulama sürüyor; Retry-After/backoff, bounded DNS pinning, config env override’ları, redacted `config explain`, config/report JSON Schemas ve karar ile uyumlu JUnit çıktısı eklendi. Opsiyonel ardışık başarılı runtime probe kontrolü de mevcut.
-**Temel:** Public `erolsenol/deploy-witness`, v0.1.0 prerelease.
+**Durum (2026-10-01):** v0.2.5 GitHub Release mevcut. `168d940` commit’inde Node 22/24 CI (lint, schema/typecheck, tests, build, packed-consumer smoke, package dry-run) geçti; yerel pre-push gate’inde 124 test geçti. README quickstart ve SHA pin düzeltildi; `coolify-staging-e2e.yml` pozitif/negatif kontrolleri tekrar edilebilir hale getiriyor. MVP’nin canlı staging E2E kanıtı yok: bağlı Coolify instance’ında DeployWitness non-production uygulaması bulunmadı. npm registry kurulumu da açık. OIDC publish provenance üretti ancak npm publish 404 ile reddedildi; ilk package bootstrap/sahipliği ve Trusted Publisher yetkisi doğrulanmalı.
+**Temel:** Public `erolsenol/deploy-witness`, güncel GitHub release `v0.2.5`.
 **Hedef:** Tek bir sağlayıcı API sonucunu “uygulama kesin doğru sürümde” iddiasına dönüştürmeden; deployment kimliği, gerçek runtime davranışı ve isteğe bağlı build provenance kanıtlarını birleştiren güvenilir, kolay entegre edilebilir bir doğrulama aracı.
 
 ## Mevcut nokta
 
-v0.1.0; Coolify read-only adapter, HTTP status/header/JSON marker probe’ları, strict YAML config, TypeScript CLI, Node 24 GitHub Action, JSON rapor ve Node 22/24 CI içeriyor. Bu plan mevcut MVP’yi tamamlanmış ve kullanıcı geri bildirimine açık temel sayar. Plan, mevcut `docs/plan.md` ve `tasks/todo.md` dosyalarının yerine geçmez; v0.2+ kapsamını ekler.
+v0.2.5; Coolify ve Vercel read-only adapter’ları, HTTP probe’ları, strict config, TypeScript CLI, Node 24 GitHub Action, JSON/JUnit raporları ve Node 22/24 CI içeriyor. Kod ve otomatik kalite kapıları MVP temeli olarak hazır. Gerçek hedefte staging doğrulaması ve npm üzerinden clean consumer kurulumu kanıtlanmadığından, müşteri kullanımına hazır olma kapısı açık kalıyor. Bu plan v0.2+ kapsamını ekler; `tasks/todo.md` MVP kabul kapılarını izler.
 
 ## Ürün hedefleri
 

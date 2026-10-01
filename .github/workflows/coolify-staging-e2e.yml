@@ -1,0 +1,89 @@
+name: Coolify staging E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full commit SHA deployed to the non-production Coolify app
+        required: true
+        type: string
+      started_after:
+        description: ISO timestamp captured immediately before that deployment
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coolify-staging-e2e
+  cancel-in-progress: false
+
+jobs:
+  verify-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Build private staging configs
+        id: staging-config
+        env:
+          DW_STAGING_COOLIFY_BASE_URL: ${{ vars.DW_STAGING_COOLIFY_BASE_URL }}
+          DW_STAGING_COOLIFY_RESOURCE_UUID: ${{ vars.DW_STAGING_COOLIFY_RESOURCE_UUID }}
+          DW_STAGING_HEALTH_URL: ${{ vars.DW_STAGING_HEALTH_URL }}
+          DW_STAGING_VERSION_URL: ${{ vars.DW_STAGING_VERSION_URL }}
+          DW_STAGING_VERSION_JSON_PATH: ${{ vars.DW_STAGING_VERSION_JSON_PATH }}
+          DW_STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          DW_STAGING_STARTED_AFTER: ${{ inputs.started_after }}
+        run: node scripts/create-staging-config.mjs
+      - name: Verify expected deployment and runtime marker
+        id: staging-positive
+        uses: ./
+        with:
+          config: ${{ steps.staging-config.outputs.positive_config }}
+          coolify-token: ${{ secrets.DW_STAGING_COOLIFY_TOKEN }}
+          expected-sha: ${{ inputs.expected_sha }}
+          started-after: ${{ inputs.started_after }}
+          report-path: ${{ runner.temp }}/deploy-witness-staging-positive.json
+      - name: Validate positive report, schema, and token redaction
+        id: staging-positive-check
+        env:
+          DW_STAGING_COOLIFY_TOKEN: ${{ secrets.DW_STAGING_COOLIFY_TOKEN }}
+          REPORT_PATH: ${{ steps.staging-positive.outputs.report-path }}
+        run: node scripts/check-staging-report.mjs positive "$REPORT_PATH"
+      - name: Prove that a wrong deployment SHA fails
+        id: staging-sha-negative
+        continue-on-error: true
+        uses: ./
+        with:
+          config: ${{ steps.staging-config.outputs.sha_mismatch_config }}
+          coolify-token: ${{ secrets.DW_STAGING_COOLIFY_TOKEN }}
+          expected-sha: ${{ steps.staging-config.outputs.sha_mismatch_expected }}
+          started-after: ${{ inputs.started_after }}
+          report-path: ${{ runner.temp }}/deploy-witness-staging-sha-negative.json
+      - name: Validate wrong SHA negative control
+        env:
+          DW_STAGING_COOLIFY_TOKEN: ${{ secrets.DW_STAGING_COOLIFY_TOKEN }}
+          REPORT_PATH: ${{ steps.staging-sha-negative.outputs.report-path }}
+        run: node scripts/check-staging-report.mjs sha-mismatch "$REPORT_PATH"
+      - name: Prove that a wrong runtime marker fails on a healthy app
+        id: staging-marker-negative
+        continue-on-error: true
+        uses: ./
+        with:
+          config: ${{ steps.staging-config.outputs.marker_mismatch_config }}
+          coolify-token: ${{ secrets.DW_STAGING_COOLIFY_TOKEN }}
+          expected-sha: ${{ inputs.expected_sha }}
+          started-after: ${{ inputs.started_after }}
+          report-path: ${{ runner.temp }}/deploy-witness-staging-marker-negative.json
+      - name: Validate wrong runtime marker negative control
+        env:
+          DW_STAGING_COOLIFY_TOKEN: ${{ secrets.DW_STAGING_COOLIFY_TOKEN }}
+          REPORT_PATH: ${{ steps.staging-marker-negative.outputs.report-path }}
+        run: node scripts/check-staging-report.mjs marker-mismatch "$REPORT_PATH"

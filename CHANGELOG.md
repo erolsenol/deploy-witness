@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.6 — 2026-10-01
+
+- Publish the first public npm package and document the npm CLI quick start.
+- Add an opt-in Coolify staging acceptance workflow with positive and negative controls.
+- Add report schema and provider-token redaction checks for staging runs.
+- Configure npm release publishing for the `npm-publish` GitHub Environment and current Trusted Publishing CLI.
+
 ## 0.2.5 — 2026-10-01
 
 - Define the security and compatibility boundary for a future opt-in GitHub artifact attestation verifier.
