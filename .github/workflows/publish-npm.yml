@@ -36,3 +36,38 @@ jobs:
       - run: npm pack --dry-run
       - name: Publish with npm Trusted Publishing and provenance
         run: npm publish --provenance --access public
+      - name: Wait for registry visibility and verify provenance
+        env:
+          PACKAGE_VERSION: ${{ github.ref_name }}
+        run: |
+          package_version="${PACKAGE_VERSION#v}"
+          version_file="$RUNNER_TEMP/deploy-witness-registry-version.txt"
+          for attempt in {1..48}; do
+            if npm view "deploy-witness@${package_version}" version --json > "$version_file" 2>/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 48 ]; then
+              echo "::error::deploy-witness@${package_version} did not become visible in npm after 8 minutes."
+              exit 1
+            fi
+            sleep 10
+          done
+          test "$(cat "$version_file")" = "\"${package_version}\""
+          npm view "deploy-witness@${package_version}" dist.integrity dist.attestations --json > "$RUNNER_TEMP/deploy-witness-registry-metadata.json"
+          node -e '
+            const fs = require("node:fs");
+            const metadata = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            if (!metadata.dist?.integrity) throw new Error("Published package has no registry integrity value.");
+            if (metadata.dist?.attestations?.provenance?.predicateType !== "https://slsa.dev/provenance/v1") {
+              throw new Error("Published package SLSA provenance is missing from npm metadata.");
+            }
+          ' "$RUNNER_TEMP/deploy-witness-registry-metadata.json"
+      - name: Smoke-test the published registry package
+        env:
+          PACKAGE_VERSION: ${{ github.ref_name }}
+        run: |
+          package_version="${PACKAGE_VERSION#v}"
+          consumer_dir="$RUNNER_TEMP/deploy-witness-consumer"
+          npm install --prefix "$consumer_dir" --no-save --no-audit --no-fund "deploy-witness@${package_version}"
+          test "$("$consumer_dir/node_modules/.bin/deploy-witness" --version)" = "$package_version"
+          "$consumer_dir/node_modules/.bin/deploy-witness" schema config-v2 > /dev/null
