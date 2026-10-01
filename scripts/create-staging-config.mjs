@@ -7,6 +7,12 @@ function required(name) {
   return value;
 }
 
+if (process.env.DW_STAGING_CONFIRM_NONPRODUCTION !== "true") {
+  throw new Error(
+    "Confirm the Coolify resource is non-production before running staging E2E.",
+  );
+}
+
 function publicHttpsUrl(name) {
   const value = required(name);
   const url = new URL(value);
