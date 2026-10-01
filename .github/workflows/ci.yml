@@ -34,4 +34,5 @@ jobs:
       - run: npm run build
       - name: Ensure the Action bundle is committed
         run: git diff --exit-code -- dist/action-bundle/index.js
+      - run: npm run consumer:smoke
       - run: npm pack --dry-run

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3 — 2026-10-01
+
+- Smoke-test the packed npm consumer install, CLI, config v2 schema, public API, and Action manifest in CI and release workflows.
+
 ## 0.2.2 — 2026-10-01
 
 - Include valid observed runtime image digests in report evidence and distinguish missing, malformed, and mismatched markers.
