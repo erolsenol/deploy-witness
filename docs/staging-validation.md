@@ -31,7 +31,9 @@ variables and one read-only secret:
 
 Deploy a commit to the staging application and capture the UTC timestamp
 immediately before that deploy step. In GitHub Actions, run **Coolify staging
-E2E** with that full SHA and timestamp. The workflow runs three controls:
+E2E** with that full SHA and timestamp, then explicitly confirm that the
+configured resource is non-production. The workflow refuses to build configs
+without this confirmation. It runs three controls:
 
 1. The expected deployment SHA and runtime marker both pass.
 2. A deliberately altered expected SHA fails specifically at the provider

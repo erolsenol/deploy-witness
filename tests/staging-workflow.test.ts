@@ -20,6 +20,7 @@ const stagingEnvironment = {
   DW_STAGING_VERSION_JSON_PATH: "build.commit",
   DW_STAGING_EXPECTED_SHA: commit,
   DW_STAGING_STARTED_AFTER: "2026-10-01T10:00:00.000Z",
+  DW_STAGING_CONFIRM_NONPRODUCTION: "true",
 };
 
 async function makeTemporaryDirectory(): Promise<string> {
@@ -120,6 +121,25 @@ describe("Coolify staging workflow helpers", () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("DW_STAGING_HEALTH_URL must use HTTPS.");
+    expect((await readFile(outputPath, "utf8")).trim()).toBe("");
+  });
+
+  it("requires explicit confirmation that the resource is non-production", async () => {
+    const directory = await makeTemporaryDirectory();
+    const outputPath = join(directory, "github-output");
+    await writeFile(outputPath, "", { mode: 0o600 });
+
+    const result = runNodeScript("scripts/create-staging-config.mjs", [], {
+      ...stagingEnvironment,
+      DW_STAGING_CONFIRM_NONPRODUCTION: undefined,
+      RUNNER_TEMP: directory,
+      GITHUB_OUTPUT: outputPath,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "Confirm the Coolify resource is non-production before running staging E2E.",
+    );
     expect((await readFile(outputPath, "utf8")).trim()).toBe("");
   });
 

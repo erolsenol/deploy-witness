@@ -11,6 +11,11 @@ on:
         description: ISO timestamp captured immediately before that deployment
         required: true
         type: string
+      confirm_nonproduction:
+        description: Confirm the configured Coolify resource is non-production
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -41,6 +46,7 @@ jobs:
           DW_STAGING_VERSION_JSON_PATH: ${{ vars.DW_STAGING_VERSION_JSON_PATH }}
           DW_STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
           DW_STAGING_STARTED_AFTER: ${{ inputs.started_after }}
+          DW_STAGING_CONFIRM_NONPRODUCTION: ${{ inputs.confirm_nonproduction }}
         run: node scripts/create-staging-config.mjs
       - name: Verify expected deployment and runtime marker
         id: staging-positive
