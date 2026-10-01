@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.5 — 2026-10-01
+
+- Define the security and compatibility boundary for a future opt-in GitHub artifact attestation verifier.
+
 ## 0.2.4 — 2026-10-01
 
 - Document supported runtimes, current provider validation, 0.x compatibility, schema migration, and reporting policies.

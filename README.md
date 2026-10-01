@@ -132,6 +132,8 @@ Create a Coolify configuration with `node dist/cli.js init` or a Vercel configur
 
 See [SECURITY.md](SECURITY.md), the [support and compatibility policy](docs/support-policy.md), [the architecture and roadmap](docs/plan.md), and [the task list](tasks/todo.md).
 
+The planned optional artifact provenance boundary is recorded in [ADR 0003](docs/adr/0003-github-artifact-attestation.md). It is not an implemented verification feature in this release.
+
 ## Releases
 
 Version tags run the full release quality gate and create a GitHub Release. npm publication is a separate manually dispatched workflow using OIDC Trusted Publishing; configure the `publish-npm.yml` trusted publisher on the npm package first. The workflow checks that the selected tag matches `package.json`, rebuilds and tests the package, and publishes with npm provenance. It uses no long-lived npm token. See [CHANGELOG.md](CHANGELOG.md) for release contents.
