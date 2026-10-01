@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { Command } from "commander";
 import {
+  CONFIG_ENV_OVERRIDES,
   ConfigLoadError,
   loadConfig,
   loadConfigDetails,
@@ -19,8 +20,8 @@ const program = new Command()
   .description("Verify that the expected commit is live after deployment.")
   .version("0.1.0");
 const templates = {
-  coolify: `version: 1\nprovider: coolify\ncoolify:\n  baseUrl: https://coolify.example.com\n  resourceUuid: replace-with-resource-uuid\ndeployment:\n  timeoutSeconds: 600\n  pollIntervalSeconds: 5\nprobes: []\n`,
-  vercel: `version: 1\nprovider: vercel\nvercel:\n  projectId: replace-with-vercel-project-id\n  target: production\ndeployment:\n  timeoutSeconds: 600\n  pollIntervalSeconds: 5\nprobes: []\n`,
+  coolify: `version: 2\nprovider: coolify\ncoolify:\n  baseUrl: https://coolify.example.com\n  resourceUuid: replace-with-resource-uuid\ndeployment:\n  timeoutSeconds: 600\n  pollIntervalSeconds: 5\nprobes: []\n`,
+  vercel: `version: 2\nprovider: vercel\nvercel:\n  projectId: replace-with-vercel-project-id\n  target: production\ndeployment:\n  timeoutSeconds: 600\n  pollIntervalSeconds: 5\nprobes: []\n`,
 } as const;
 
 program
@@ -77,11 +78,18 @@ configCommand
 program
   .command("schema")
   .description("Print or write a public JSON Schema contract.")
-  .argument("<name>", "schema name: config or report")
+  .argument("<name>", "schema name: config, config-v1, config-v2, or report")
   .option("-o, --output <path>", "write JSON Schema to a file")
   .action(async (name: string, options: { output?: string }) => {
-    if (name !== "config" && name !== "report") {
-      console.error("SCHEMA_NAME_INVALID: Choose config or report.");
+    if (
+      name !== "config" &&
+      name !== "config-v1" &&
+      name !== "config-v2" &&
+      name !== "report"
+    ) {
+      console.error(
+        "SCHEMA_NAME_INVALID: Choose config, config-v1, config-v2, or report.",
+      );
       process.exitCode = 2;
       return;
     }
@@ -131,6 +139,11 @@ configCommand
         "deployment.status",
         "deployment.commit",
         "deployment.freshness",
+        ...(("expectedImageDigest" in loaded.config.deployment &&
+          loaded.config.deployment.expectedImageDigest) ||
+        process.env.DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST
+          ? ["deployment.image-digest"]
+          : []),
         ...probeIds,
       ]) {
         console.log(`  - ${id}`);
@@ -157,6 +170,10 @@ program
     "--started-after <timestamp>",
     "deployment-run boundary timestamp (ISO 8601)",
   )
+  .option(
+    "--expected-image-digest <digest>",
+    "expected immutable OCI image digest (sha256:<64 hex characters>)",
+  )
   .option("--report <path>", "write JSON evidence report")
   .option("--junit <path>", "write JUnit XML check results")
   .action(
@@ -164,11 +181,29 @@ program
       config: string;
       expectedSha?: string;
       startedAfter?: string;
+      expectedImageDigest?: string;
       report?: string;
       junit?: string;
     }) => {
       try {
-        const config = await loadConfig(options.config);
+        if (
+          options.expectedImageDigest !== undefined &&
+          !/^sha256:[a-f0-9]{64}$/i.test(options.expectedImageDigest)
+        ) {
+          console.error(
+            "EXPECTED_IMAGE_DIGEST_INVALID: Provide sha256: followed by 64 hexadecimal characters.",
+          );
+          process.exitCode = 2;
+          return;
+        }
+        const configEnv = options.expectedImageDigest
+          ? {
+              ...process.env,
+              [CONFIG_ENV_OVERRIDES.expectedImageDigest]:
+                options.expectedImageDigest,
+            }
+          : process.env;
+        const config = await loadConfig(options.config, { env: configEnv });
         const expectedSha =
           options.expectedSha ??
           config.deployment.expectedSha ??
@@ -193,6 +228,22 @@ program
           process.exitCode = 2;
           return;
         }
+        const expectedImageDigest =
+          options.expectedImageDigest ??
+          process.env.DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST ??
+          ("expectedImageDigest" in config.deployment
+            ? config.deployment.expectedImageDigest
+            : undefined);
+        if (
+          expectedImageDigest !== undefined &&
+          !/^sha256:[a-f0-9]{64}$/i.test(expectedImageDigest)
+        ) {
+          console.error(
+            "EXPECTED_IMAGE_DIGEST_INVALID: Provide sha256: followed by 64 hexadecimal characters.",
+          );
+          process.exitCode = 2;
+          return;
+        }
         const report = await runVerification({
           config,
           token,
@@ -200,6 +251,7 @@ program
           ...(options.startedAfter
             ? { startedAfter: options.startedAfter }
             : {}),
+          ...(expectedImageDigest ? { expectedImageDigest } : {}),
         });
         if (options.report)
           await writeFile(

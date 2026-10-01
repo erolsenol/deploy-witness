@@ -1,0 +1,44 @@
+name: GitHub Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Verify tag matches package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: test "v$(node -p 'require("./package.json").version')" = "$RELEASE_TAG"
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run schema:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Ensure the Action bundle is committed
+        run: git diff --exit-code -- dist/action-bundle/index.js
+      - run: npm pack --dry-run
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists."
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+          fi

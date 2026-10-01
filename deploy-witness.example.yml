@@ -1,4 +1,4 @@
-version: 1
+version: 2
 provider: coolify
 coolify:
   baseUrl: https://coolify.example.com

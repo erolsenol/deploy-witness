@@ -11,6 +11,7 @@ export const CONFIG_ENV_OVERRIDES = {
   coolifyBaseUrl: "DEPLOY_WITNESS_COOLIFY_BASE_URL",
   coolifyResourceUuid: "DEPLOY_WITNESS_COOLIFY_RESOURCE_UUID",
   expectedSha: "DEPLOY_WITNESS_EXPECTED_SHA",
+  expectedImageDigest: "DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST",
   startedAfter: "DEPLOY_WITNESS_STARTED_AFTER",
   vercelProjectId: "DEPLOY_WITNESS_VERCEL_PROJECT_ID",
   vercelTeamId: "DEPLOY_WITNESS_VERCEL_TEAM_ID",
@@ -146,6 +147,12 @@ export async function loadConfigDetails(
           : {}),
         ...(env[CONFIG_ENV_OVERRIDES.startedAfter]
           ? { startedAfter: env[CONFIG_ENV_OVERRIDES.startedAfter] }
+          : {}),
+        ...(root.version === 2 && env[CONFIG_ENV_OVERRIDES.expectedImageDigest]
+          ? {
+              expectedImageDigest:
+                env[CONFIG_ENV_OVERRIDES.expectedImageDigest],
+            }
           : {}),
       },
     };

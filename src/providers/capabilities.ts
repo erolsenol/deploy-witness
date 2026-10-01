@@ -36,6 +36,11 @@ const CAPABILITIES: Record<
       reason:
         "The adapter compares the commit SHA returned by deployment records.",
     },
+    {
+      name: "deployment.image-digest",
+      reason:
+        "The documented deployment record fields do not provide an observed immutable image digest.",
+    },
   ],
   vercel: [
     {
@@ -67,6 +72,11 @@ const CAPABILITIES: Record<
       reason:
         "The adapter requests Git source details and compares the full commit SHA.",
     },
+    {
+      name: "deployment.image-digest",
+      reason:
+        "The documented deployment detail fields do not provide an observed immutable image digest.",
+    },
   ],
 };
 
@@ -76,10 +86,11 @@ export function providerCapabilities(
 ): readonly ProviderCapability[] {
   return CAPABILITIES[provider].map((capability) => {
     const unsupported =
-      provider === "coolify" &&
-      ["deployment.target-filter", "deployment.team-scope"].includes(
-        capability.name,
-      );
+      capability.name === "deployment.image-digest" ||
+      (provider === "coolify" &&
+        ["deployment.target-filter", "deployment.team-scope"].includes(
+          capability.name,
+        ));
     if (unsupported) return { ...capability, status: "UNSUPPORTED" };
     if (!apiAvailable)
       return {

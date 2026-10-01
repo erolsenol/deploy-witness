@@ -1,25 +1,30 @@
 name: CI
 
 on:
-  push:
   pull_request:
-  workflow_dispatch:
+  push:
+    branches: [main, development]
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
+    name: Node ${{ matrix.node-version }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node: [22, 24]
+        node-version: [22, 24]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: ${{ matrix.node }}
+          node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
       - run: npm run lint
@@ -27,4 +32,6 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Ensure the Action bundle is committed
+        run: git diff --exit-code -- dist/action-bundle/index.js
       - run: npm pack --dry-run

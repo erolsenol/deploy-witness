@@ -1,13 +1,29 @@
 import { z } from "zod";
-import { VerificationConfigSchema, VerificationReportSchema } from "./index.js";
+import {
+  VerificationConfigV1Schema,
+  VerificationConfigV2Schema,
+  VerificationReportSchema,
+} from "./index.js";
 
-export type PublicSchemaName = "config" | "report";
+export type PublicSchemaName = "config" | "config-v1" | "config-v2" | "report";
 
 const schemaDefinitions = {
   config: {
-    schema: VerificationConfigSchema,
+    schema: VerificationConfigV2Schema,
+    title: "DeployWitness Configuration v2",
+    id: "https://raw.githubusercontent.com/erolsenol/deploy-witness/main/schemas/config-v2.schema.json",
+    io: "input",
+  },
+  "config-v1": {
+    schema: VerificationConfigV1Schema,
     title: "DeployWitness Configuration v1",
     id: "https://raw.githubusercontent.com/erolsenol/deploy-witness/main/schemas/config-v1.schema.json",
+    io: "input",
+  },
+  "config-v2": {
+    schema: VerificationConfigV2Schema,
+    title: "DeployWitness Configuration v2",
+    id: "https://raw.githubusercontent.com/erolsenol/deploy-witness/main/schemas/config-v2.schema.json",
     io: "input",
   },
   report: {

@@ -32,6 +32,15 @@ export interface EvaluateDeploymentEvidenceOptions {
   readonly startedAt: number;
 }
 
+export interface EvaluateImageDigestOptions {
+  readonly provider: "coolify" | "vercel";
+  readonly expectedDigest: string;
+  readonly observedDigest?: string;
+  readonly supported: boolean;
+  readonly observedAt: string;
+  readonly startedAt: number;
+}
+
 function check(
   id: string,
   status: CheckResult["status"],
@@ -227,4 +236,61 @@ export function evaluateDeploymentEvidence(
             );
 
   return [statusCheck, commitCheck, freshnessCheck];
+}
+
+export function evaluateImageDigestEvidence(
+  options: EvaluateImageDigestOptions,
+): CheckResult {
+  const providerName = options.provider === "coolify" ? "Coolify" : "Vercel";
+  const digestPattern = /^sha256:[a-f0-9]{64}$/i;
+  const observed = options.observedDigest?.toLowerCase();
+  const validExpected = digestPattern.test(options.expectedDigest);
+  const validObserved = observed === undefined || digestPattern.test(observed);
+  const status: CheckResult["status"] = !options.supported
+    ? "UNSUPPORTED"
+    : !validExpected || !validObserved || observed === undefined
+      ? "UNKNOWN"
+      : observed === options.expectedDigest.toLowerCase()
+        ? "PASS"
+        : "FAIL";
+  const failureCode =
+    status === "UNSUPPORTED"
+      ? "DEPLOYMENT_IMAGE_DIGEST_UNSUPPORTED"
+      : status === "UNKNOWN"
+        ? !validExpected
+          ? "EXPECTED_IMAGE_DIGEST_INVALID"
+          : !validObserved
+            ? "DEPLOYMENT_IMAGE_DIGEST_INVALID"
+            : "DEPLOYMENT_IMAGE_DIGEST_MISSING"
+        : status === "FAIL"
+          ? "DEPLOYMENT_IMAGE_DIGEST_MISMATCH"
+          : undefined;
+  const summary =
+    status === "PASS"
+      ? `${providerName} deployment image digest matches the expected immutable digest.`
+      : status === "FAIL"
+        ? `${providerName} deployment image digest does not match the expected digest.`
+        : status === "UNSUPPORTED"
+          ? `${providerName} does not expose an immutable image digest for this deployment through the verified read-only API fields.`
+          : observed === undefined
+            ? `${providerName} did not provide an observed image digest.`
+            : `${providerName} returned an invalid image digest value.`;
+
+  return check(
+    "deployment.image-digest",
+    status,
+    summary,
+    options.observedAt,
+    options.startedAt,
+    [
+      {
+        source: options.provider,
+        observedAt: options.observedAt,
+        field: "imageDigest",
+        expected: options.expectedDigest.toLowerCase(),
+        observed: validObserved ? (observed ?? null) : null,
+      },
+    ],
+    failureCode,
+  );
 }
