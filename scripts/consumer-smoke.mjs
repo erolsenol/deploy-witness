@@ -121,6 +121,20 @@ try {
   )
     throw new Error("PACKED_SUPPORT_POLICY_MISSING");
 
+  if (
+    !existsSync(
+      join(
+        consumerDirectory,
+        "node_modules",
+        "deploy-witness",
+        "docs",
+        "adr",
+        "0003-github-artifact-attestation.md",
+      ),
+    )
+  )
+    throw new Error("PACKED_ATTESTATION_ADR_MISSING");
+
   console.log(
     `Packed consumer smoke passed for deploy-witness@${metadata.version}.`,
   );

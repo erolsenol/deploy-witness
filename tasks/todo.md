@@ -372,6 +372,8 @@ Detaylı mimari, scope, güvenlik modeli ve release kapıları [`tasks/plan.md`]
 
 **İş:** GitHub artifact provenance signature/identity/subject doğrulamasını ayrı supply-chain check olarak ekle.
 
+**İlerleme (2026-10-01):** Threat model ve mimari sınır [`ADR 0003`](../docs/adr/0003-github-artifact-attestation.md) içinde kabul edildi. Config v1/v2 ve report v1'in katı sözleşmeleri korunacak; uygulama öncesinde config v3/report v2 tasarımı gerekiyor. Kriptografik doğrulama GitHub CLI'ye delege edilecek, workflow-controlled predicate alanları güvenilir kimlik politikası sayılmayacak. Bu kayıt verifier'ın uygulandığı anlamına gelmez.
+
 **Kabul ölçütleri:**
 - [ ] Repository, workflow identity, commit, subject digest ve trust policy kontrol edilir.
 - [ ] Attestation build provenance’ı kanıtlar; production runtime state olarak sunulmaz.
