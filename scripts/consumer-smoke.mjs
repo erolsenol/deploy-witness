@@ -108,6 +108,19 @@ try {
   )
     throw new Error("PACKED_ACTION_MANIFEST_MISSING");
 
+  if (
+    !existsSync(
+      join(
+        consumerDirectory,
+        "node_modules",
+        "deploy-witness",
+        "docs",
+        "support-policy.md",
+      ),
+    )
+  )
+    throw new Error("PACKED_SUPPORT_POLICY_MISSING");
+
   console.log(
     `Packed consumer smoke passed for deploy-witness@${metadata.version}.`,
   );
