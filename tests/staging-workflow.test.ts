@@ -33,7 +33,11 @@ function runNodeScript(
   args: readonly string[],
   env: NodeJS.ProcessEnv,
 ) {
-  return spawnSync(process.execPath, [resolve(script), ...args], {
+  const isTypeScript = script.endsWith(".ts");
+  const executableArgs = isTypeScript
+    ? [resolve("node_modules/tsx/dist/cli.mjs"), resolve(script), ...args]
+    : [resolve(script), ...args];
+  return spawnSync(process.execPath, executableArgs, {
     cwd: process.cwd(),
     encoding: "utf8",
     env: { ...process.env, ...env },
@@ -131,7 +135,7 @@ describe("Coolify staging workflow helpers", () => {
     const reportPath = await writeReport(directory, report);
 
     const result = runNodeScript(
-      "scripts/check-staging-report.mjs",
+      "scripts/check-staging-report.ts",
       ["sha-mismatch", reportPath],
       { DW_STAGING_COOLIFY_TOKEN: token },
     );
@@ -151,7 +155,7 @@ describe("Coolify staging workflow helpers", () => {
     const reportPath = await writeReport(directory, report);
 
     const result = runNodeScript(
-      "scripts/check-staging-report.mjs",
+      "scripts/check-staging-report.ts",
       ["marker-mismatch", reportPath],
       { DW_STAGING_COOLIFY_TOKEN: "test-only-provider-token" },
     );
@@ -169,7 +173,7 @@ describe("Coolify staging workflow helpers", () => {
     const reportPath = await writeReport(directory, report);
 
     const result = runNodeScript(
-      "scripts/check-staging-report.mjs",
+      "scripts/check-staging-report.ts",
       ["positive", reportPath],
       { DW_STAGING_COOLIFY_TOKEN: token },
     );

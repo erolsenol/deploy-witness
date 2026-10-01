@@ -56,7 +56,7 @@ jobs:
         env:
           DW_STAGING_COOLIFY_TOKEN: ${{ secrets.DW_STAGING_COOLIFY_TOKEN }}
           REPORT_PATH: ${{ steps.staging-positive.outputs.report-path }}
-        run: node scripts/check-staging-report.mjs positive "$REPORT_PATH"
+        run: npx tsx scripts/check-staging-report.ts positive "$REPORT_PATH"
       - name: Prove that a wrong deployment SHA fails
         id: staging-sha-negative
         continue-on-error: true
@@ -71,7 +71,7 @@ jobs:
         env:
           DW_STAGING_COOLIFY_TOKEN: ${{ secrets.DW_STAGING_COOLIFY_TOKEN }}
           REPORT_PATH: ${{ steps.staging-sha-negative.outputs.report-path }}
-        run: node scripts/check-staging-report.mjs sha-mismatch "$REPORT_PATH"
+        run: npx tsx scripts/check-staging-report.ts sha-mismatch "$REPORT_PATH"
       - name: Prove that a wrong runtime marker fails on a healthy app
         id: staging-marker-negative
         continue-on-error: true
@@ -86,4 +86,4 @@ jobs:
         env:
           DW_STAGING_COOLIFY_TOKEN: ${{ secrets.DW_STAGING_COOLIFY_TOKEN }}
           REPORT_PATH: ${{ steps.staging-marker-negative.outputs.report-path }}
-        run: node scripts/check-staging-report.mjs marker-mismatch "$REPORT_PATH"
+        run: npx tsx scripts/check-staging-report.ts marker-mismatch "$REPORT_PATH"

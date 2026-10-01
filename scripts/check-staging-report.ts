@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { VerificationReportSchema } from "../dist/contracts/index.js";
+import { VerificationReportSchema } from "../src/contracts/index.js";
 
 const [scenario, reportPath] = process.argv.slice(2);
 if (!scenario || !reportPath) {
