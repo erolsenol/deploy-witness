@@ -1,6 +1,6 @@
 # DeployWitness — Uygulama Görev Listesi
 
-> Progress update (2026-10-01): v0.2.0 GitHub Release is public with config v2 image digest inputs, independent runtime digest markers, generated schemas, and Node 22/24 CI. A v0.2.1 fix aligns the CLI/report version with package metadata. npm registry publication remains pending initial package bootstrap and Trusted Publisher setup; authenticated provider staging E2E is still separate.
+> Progress update (2026-10-01): GitHub Release `v0.2.5` is public. On commit `168d940`, CI passed on Node 22 and 24, including lint, schema/type checks, tests, build, packed-consumer smoke, and package dry-run. The 124-test local pre-push gate also passed. The README quickstart and full-SHA Action pin are current. A manual, read-only Coolify staging E2E workflow now checks correct SHA/runtime marker, wrong-SHA rejection, wrong-marker rejection, report schema, and token redaction. It has not run: the configured Coolify instance contains no DeployWitness staging app, and no staging environment variables/secrets are configured. MVP acceptance remains open until that run passes. The OIDC publish workflow produced provenance but npm rejected the publish with 404. `npm whoami` resolves to `erol.senol`, whose accessible packages list contains only `typedmailer`; first package publication/ownership and Trusted Publisher authorization still need account setup.
 
 Bu liste plan onaylandıktan sonra uygulama sırasıdır. Her görev ayrı ve gözden geçirilebilir bir dilim olarak bitirilir; geniş görevler alt görevlere bölünür.
 
@@ -226,7 +226,7 @@ Bu liste plan onaylandıktan sonra uygulama sırasıdır. Her görev ayrı ve g�
 **Bağımlılık:** DW-15.
 **Boyut:** M.
 
-### DW-17: v0.1 beta yayınla ve sonraki ihtiyaçları ölç
+### DW-17: npm paket bootstrap’i ve beta release kanıtı
 
 **İş:** Public repo, npm package ve GitHub Action release’i yayınla; provider genişleme talebini issue template ile topla.
 

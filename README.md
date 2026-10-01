@@ -34,17 +34,38 @@ probes:
 
 ## Quick start
 
-Requirements: Node.js 22 or newer.
+Requirements: Node.js 22 or newer. Install the CLI from npm and create a starter configuration:
 
-    git clone https://github.com/erolsenol/deploy-witness.git
-    cd deploy-witness
-    npm ci
-    npm run build
-    node dist/cli.js init
-    node dist/cli.js config validate
-node dist/cli.js verify --expected-sha "$GITHUB_SHA" --report deploy-witness-report.json --junit deploy-witness.xml
+```sh
+npm install --global deploy-witness
+deploy-witness init
+```
 
-Set `COOLIFY_API_TOKEN` or `VERCEL_TOKEN` in the environment from your secret manager according to the selected provider before running `verify`. The GitHub Action and source repository are public. npm installation will be available after the initial package publication; until then use the source checkout for the CLI or pin the Action to a reviewed commit SHA.
+Edit `deploy-witness.yml` with the Coolify base URL, application resource UUID,
+and public health/version probe URLs. Keep provider credentials out of the
+config; set the read-only token in your shell or CI secret store, then validate
+and run the check:
+
+```sh
+deploy-witness config validate
+# Run after deployment in CI, where GITHUB_SHA identifies the expected commit.
+# Inject COOLIFY_API_TOKEN from the CI secret store; do not paste it into this file.
+deploy-witness verify \
+  --expected-sha "$GITHUB_SHA" \
+  --started-after "$DEPLOY_STARTED_AT" \
+  --report deploy-witness-report.json \
+  --junit deploy-witness.xml
+```
+
+Capture `DEPLOY_STARTED_AT` immediately before the deployment step. The
+complete read-only staging acceptance workflow and its required GitHub
+Environment settings are documented in
+[`docs/staging-validation.md`](docs/staging-validation.md).
+
+For Vercel, initialize with `deploy-witness init --provider vercel` and set
+`VERCEL_TOKEN`. The GitHub Action and source repository are public. npm
+installation is available from the public npm registry; pin the Action to a
+reviewed commit SHA.
 
 `config validate` checks the effective configuration. `config explain` shows the file path, applied override names, and planned check IDs without printing configuration values. Explicit CLI flags take precedence over environment variables, which take precedence over YAML/JSON:
 
@@ -108,12 +129,15 @@ The Action runs after your deploy step. Store the read-only provider token as a 
       run: echo "timestamp=$(node -p 'new Date().toISOString()')" >> "$GITHUB_OUTPUT"
 
     - name: Verify deployment
-      uses: erolsenol/deploy-witness@d9422aad71bf17e90fb8a38ae8d73c63945bbd35
+      uses: erolsenol/deploy-witness@168d94079f1837b2a91fea69585b093f6781ca5a
       with:
         config: deploy-witness.yml
         coolify-token: ${{ secrets.COOLIFY_READ_ONLY_TOKEN }}
         expected-sha: ${{ github.sha }}
         started-after: ${{ steps.deploy-witness-boundary.outputs.timestamp }}
+
+For repeatable positive and negative provider checks against a non-production
+Coolify app, follow the [staging validation guide](docs/staging-validation.md).
 
 For Vercel, select a `provider: vercel` config and pass `vercel-token: ${{ secrets.VERCEL_READ_ONLY_TOKEN }}` instead. The Action masks either provider token before verification.
 
