@@ -51281,7 +51281,11 @@ async function verifyVercelDeployment(options) {
     return incompleteDeployment(lastObservedAt, startedAt, "VERCEL_DEPLOYMENT_TIMEOUT", "No matching Vercel deployment became ready before the verification deadline.");
 }
 //# sourceMappingURL=verify.js.map
+;// CONCATENATED MODULE: ./dist/version.js
+const TOOL_VERSION = "0.2.1";
+//# sourceMappingURL=version.js.map
 ;// CONCATENATED MODULE: ./dist/core/verify.js
+
 
 
 
@@ -51386,7 +51390,7 @@ async function runVerification(options) {
     ];
     return VerificationReportSchema.parse({
         schemaVersion: 1,
-        toolVersion: "0.1.0",
+        toolVersion: TOOL_VERSION,
         runId: (0,external_node_crypto_.randomUUID)(),
         createdAt: new Date().toISOString(),
         expectedSha: options.expectedSha,

@@ -13,6 +13,17 @@ afterEach(async () => {
 });
 
 describe("CLI configuration commands", () => {
+  it("reports the package version", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/cli.ts", "--version"],
+      { cwd: process.cwd(), encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe("0.2.1");
+  });
+
   it("initializes new configuration files with config v2", async () => {
     const dir = await mkdtemp(join(tmpdir(), "deploy-witness-cli-"));
     dirs.push(dir);

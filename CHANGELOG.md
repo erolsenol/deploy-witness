@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 — 2026-10-01
+
+- Report the package version consistently from the CLI and JSON evidence reports.
+
 ## 0.2.0 — 2026-10-01
 
 - Add config v2 with strict `deployment.expectedImageDigest` validation while preserving config v1.
