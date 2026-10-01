@@ -1,6 +1,6 @@
 {
   "name": "deploy-witness",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Verify that the expected commit is live after deployment.",
   "type": "module",
   "license": "MIT",
@@ -31,7 +31,8 @@
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
-    "SECURITY.md"
+    "SECURITY.md",
+    "docs/support-policy.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && ncc build dist/action/index.js -o dist/action-bundle",

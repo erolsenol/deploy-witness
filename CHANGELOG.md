@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4 — 2026-10-01
+
+- Document supported runtimes, current provider validation, 0.x compatibility, schema migration, and reporting policies.
+
 ## 0.2.3 — 2026-10-01
 
 - Smoke-test the packed npm consumer install, CLI, config v2 schema, public API, and Action manifest in CI and release workflows.

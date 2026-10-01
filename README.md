@@ -130,7 +130,7 @@ Create a Coolify configuration with `node dist/cli.js init` or a Vercel configur
 - A provider status or response field DeployWitness does not recognize is reported as unknown, not success.
 - Reports are diagnostic evidence, not a cryptographic attestation or proof that the provider itself is trustworthy.
 
-See [SECURITY.md](SECURITY.md), [the architecture and roadmap](docs/plan.md), and [the task list](tasks/todo.md).
+See [SECURITY.md](SECURITY.md), the [support and compatibility policy](docs/support-policy.md), [the architecture and roadmap](docs/plan.md), and [the task list](tasks/todo.md).
 
 ## Releases
 

@@ -400,7 +400,9 @@ Detaylı mimari, scope, güvenlik modeli ve release kapıları [`tasks/plan.md`]
 
 **İş:** Monorepo örneği, GitHub dışı CI örneği, support/security politikaları ve v1 API kararlılık kontrolünü hazırla.
 
-**İlerleme (2026-10-01):** CI ve tag release gate’ine gerçek npm tarball’ını geçici consumer dizinine offline kuran smoke eklendi. Test kurulu paketten CLI sürümünü, config-v2 JSON Schema çıktısını, `VerificationConfigSchema` public import’unu ve Action manifestini doğruluyor.
+**İlerleme (2026-10-01):** CI ve tag release gate’ine gerçek npm tarball’ını geçici consumer dizinine kuran smoke eklendi. Test kurulu paketten CLI sürümünü, config-v2 JSON Schema çıktısını, `VerificationConfigSchema` public import’unu ve Action manifestini doğruluyor.
+
+**İlerleme (2026-10-01):** Destek matrisi ve 0.x semver/config-report schema geçiş kuralları `docs/support-policy.md` içinde yayımlandı; güvenlik ve genel hata bildirim kanalları, veri redaksiyonu ve yanıt süresi taahhüdü olmadığı da açıklandı.
 
 **Kabul ölçütleri:**
 - [ ] CLI, Node Action ve GitHub dışı CI örneği clean consumer’da çalışır.
