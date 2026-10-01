@@ -290,7 +290,13 @@ async function verifySingleHttpProbe(
           typeof observed === "number" ||
           typeof observed === "boolean" ||
           observed === null;
-        const matches = sameScalar(observed, probe.expectedJson.value);
+        const isImageDigestMarker =
+          "imageDigestJsonPath" in probe && Boolean(probe.imageDigestJsonPath);
+        const matches = isImageDigestMarker
+          ? typeof observed === "string" &&
+            typeof probe.expectedJson.value === "string" &&
+            observed.toLowerCase() === probe.expectedJson.value.toLowerCase()
+          : sameScalar(observed, probe.expectedJson.value);
         evidence.push({
           source: "http",
           observedAt,

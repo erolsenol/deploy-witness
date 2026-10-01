@@ -302,7 +302,7 @@ Detaylı mimari, scope, güvenlik modeli ve release kapıları [`tasks/plan.md`]
 - [x] Config açıklaması değerleri ve sırları yazdırmadan kaynak/override sırasını gösterir.
 - [x] JUnit ve JSON check kimliğini ve CI kararına denk sonucu korur; rapor kararı JUnit property alanında yer alır.
 - [x] Sürümlü config/report JSON Schema dosyaları runtime sözleşmelerinden üretilir ve CI'da drift açısından denetlenir.
-- [ ] Report v1 ve config v1 tüketicileri için migration sınırları testlidir.
+- [x] Report v1 ve config v1 tüketicileri için migration sınırları testlidir; unknown report fields artık runtime schema tarafından da reddedilir ve version bump gereksinimi README'de belgelenmiştir.
 
 **Doğrulama:** CLI integration + format parity testleri ve packed consumer smoke.
 **Bağımlılık:** DW-R01.
@@ -357,12 +357,14 @@ Detaylı mimari, scope, güvenlik modeli ve release kapıları [`tasks/plan.md`]
 
 **İş:** Beklenen OCI digest, provider deployment digest’i ve opsiyonel runtime build marker’ını ayrı kontrollerle ilişkilendir.
 
-**Kabul ölçütleri:**
-- [ ] Tag eşitliği immutable digest eşitliği sayılmaz.
-- [ ] Digest alanı sunmayan provider UNSUPPORTED bildirir; required policy PASS vermez.
-- [ ] Kaynak SHA, image digest ve runtime marker çelişkisi PASS olamaz.
+**İlerleme (2026-10-01):** Config v2 (`deployment.expectedImageDigest`) eklendi; config v1 strict/geriye uyumlu kaldı, `init` artık v2 üretip public v1/v2 JSON Schema’ları ayrı tutuluyor. V2 probe `imageDigestJsonPath` ile beklenen digest’i tek config alanından runtime JSON marker’ına uygular; aynı probe’da çakışan `expectedJson` reddedilir. CLI (`--expected-image-digest` / `DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST`) ve GitHub Action girdileri config değerini override eder. Ortak digest evaluator exact-match PASS, mismatch FAIL, missing/invalid UNKNOWN ve adapter destek yoksa required UNSUPPORTED üretiyor. Runtime JSON marker bağımsız çalışıyor; uyuşmazlık genel kararı FAIL yapıyor. Digest hex karşılaştırması yalnızca image marker için case-insensitive normalleştirilir. Resmi API alan incelemesinde mevcut Coolify/Vercel deployment kayıtları observed immutable digest göstermediği için bu adapter’lar fail-closed UNSUPPORTED kalıyor. Provider-side positive/mismatch fixture’ı, bir API gerçek deployment digest’i sunduğunda adapter entegrasyonuyla tamamlanacak.
 
-**Doğrulama:** Mismatch, missing, unsupported ve positive digest fixtures.
+**Kabul ölçütleri:**
+- [x] Tag eşitliği immutable digest eşitliği sayılmaz; beklenen/gözlenen değerler `sha256:<64 hex>` doğrulamasından geçer.
+- [x] Digest alanı sunmayan provider UNSUPPORTED bildirir; required policy PASS vermez.
+- [x] Kaynak SHA, image digest ve runtime marker kontrolleri ayrı kalır; digest mismatch ve runtime marker uyuşmazlığı PASS vermez.
+
+**Doğrulama:** Ortak evaluator için mismatch, missing, unsupported, invalid/tag, positive testleri; core seviyede runtime marker positive/mismatch; gerçek provider positive/mismatch fixtures unsupported provider API nedeniyle beklemede.
 **Bağımlılık:** DW-R01, DW-R05.
 **Boyut:** M.
 
@@ -382,6 +384,8 @@ Detaylı mimari, scope, güvenlik modeli ve release kapıları [`tasks/plan.md`]
 ### DW-R10: npm OIDC release ve provenance
 
 **İş:** İlk package bootstrap’i tamamlandıktan sonra tag bazlı npm Trusted Publishing workflow’u ve doğrulama rehberini ekle.
+
+**İlerleme (2026-10-01):** Node 24 OIDC publish workflow’u `publish-npm.yml` adıyla eklendi; `id-token: write`, release-tag/package-version eşleşmesi, kalite kapıları ve provenance’lı publish adımı var. `package.json` GitHub repository metadata’sı eklendi. npm paketi henüz registry’de yok ve bu çalışma alanındaki npm oturumu kimlik doğrulamamış (`npm whoami` 401); ilk npm package bootstrap’i ve npm Trusted Publisher ayarı bu nedenle tamamlanamadı.
 
 **Kabul ölçütleri:**
 - [ ] Release workflow yalnızca protected tag/environment ile çalışır, minimum OIDC izinlerini alır.

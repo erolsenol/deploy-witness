@@ -8,6 +8,7 @@ import { decide, VerificationReportSchema } from "../contracts/index.js";
 import { verifyHttpProbe } from "../probes/http.js";
 import { providerCapabilities } from "../providers/capabilities.js";
 import { verifyCoolifyDeployment } from "../providers/coolify/verify.js";
+import { evaluateImageDigestEvidence } from "../providers/deployment-evidence.js";
 import { verifyVercelDeployment } from "../providers/vercel/verify.js";
 
 export interface RunVerificationOptions {
@@ -15,8 +16,11 @@ export interface RunVerificationOptions {
   readonly token: string;
   readonly expectedSha: string;
   readonly startedAfter?: string;
+  readonly expectedImageDigest?: string;
   readonly fetchImpl?: typeof fetch;
 }
+
+const IMAGE_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/i;
 
 function skippedRuntimeChecks(
   config: VerificationConfig,
@@ -45,11 +49,31 @@ export async function runVerification(
 ): Promise<VerificationReport> {
   const { config } = options;
   const startedAfter = options.startedAfter ?? config.deployment.startedAfter;
+  const expectedImageDigest =
+    options.expectedImageDigest ??
+    ("expectedImageDigest" in config.deployment
+      ? config.deployment.expectedImageDigest
+      : undefined);
   if (
     startedAfter !== undefined &&
     !Number.isFinite(Date.parse(startedAfter))
   ) {
     throw new Error("STARTED_AFTER_INVALID");
+  }
+  if (
+    expectedImageDigest !== undefined &&
+    !IMAGE_DIGEST_PATTERN.test(expectedImageDigest)
+  ) {
+    throw new Error("EXPECTED_IMAGE_DIGEST_INVALID");
+  }
+  if (
+    config.probes.some(
+      (probe) =>
+        "imageDigestJsonPath" in probe && Boolean(probe.imageDigestJsonPath),
+    ) &&
+    expectedImageDigest === undefined
+  ) {
+    throw new Error("EXPECTED_IMAGE_DIGEST_REQUIRED");
   }
   const providerChecks =
     config.provider === "coolify"
@@ -72,10 +96,14 @@ export async function runVerification(
         });
 
   const deploymentVerified = providerChecks
-    .filter(
-      (result) =>
-        result.id.startsWith("provider.") ||
-        result.id.startsWith("deployment."),
+    .filter((result) =>
+      [
+        "provider.coolify-api",
+        "provider.vercel-api",
+        "deployment.status",
+        "deployment.commit",
+        "deployment.freshness",
+      ].includes(result.id),
     )
     .every((result) => !result.required || result.status === "PASS");
   const providerApiAvailable = providerChecks.some(
@@ -87,17 +115,43 @@ export async function runVerification(
 
   const runtimeChecks = deploymentVerified
     ? await Promise.all(
-        config.probes.map((probe) =>
-          verifyHttpProbe(
-            probe,
+        config.probes.map((probe) => {
+          const runtimeProbe =
+            "imageDigestJsonPath" in probe && probe.imageDigestJsonPath
+              ? {
+                  ...probe,
+                  expectedJson: {
+                    path: probe.imageDigestJsonPath,
+                    value: expectedImageDigest ?? "",
+                  },
+                }
+              : probe;
+          return verifyHttpProbe(
+            runtimeProbe,
             options.fetchImpl ? { fetchImpl: options.fetchImpl } : {},
-          ),
-        ),
+          );
+        }),
       )
     : skippedRuntimeChecks(
         config,
         "Runtime probes were not run because provider deployment evidence did not pass.",
       );
+
+  const checks = [
+    ...providerChecks,
+    ...(expectedImageDigest
+      ? [
+          evaluateImageDigestEvidence({
+            provider: config.provider,
+            expectedDigest: expectedImageDigest,
+            supported: false,
+            observedAt: new Date().toISOString(),
+            startedAt: Date.now(),
+          }),
+        ]
+      : []),
+    ...runtimeChecks,
+  ];
 
   return VerificationReportSchema.parse({
     schemaVersion: 1,
@@ -110,8 +164,8 @@ export async function runVerification(
       config.provider === "coolify"
         ? config.coolify.resourceUuid
         : config.vercel.projectId,
-    decision: decide([...providerChecks, ...runtimeChecks]),
+    decision: decide(checks),
     capabilities: providerCapabilities(config.provider, providerApiAvailable),
-    checks: [...providerChecks, ...runtimeChecks],
+    checks,
   });
 }

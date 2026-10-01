@@ -34,6 +34,94 @@ describe("configuration loading", () => {
     expect(config.probes).toEqual([]);
   });
 
+  it("loads config v2 image digest expectations", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
+    const config = await loadConfig(
+      await configFile(
+        `version: 2\nprovider: coolify\ncoolify:\n  baseUrl: https://coolify.example.test\n  resourceUuid: app-1\ndeployment:\n  expectedImageDigest: ${digest}\nprobes:\n  - name: image\n    url: https://app.example.test/version\n    imageDigestJsonPath: build.imageDigest\n`,
+      ),
+    );
+    expect(config.version).toBe(2);
+    expect(
+      "expectedImageDigest" in config.deployment &&
+        config.deployment.expectedImageDigest,
+    ).toBe(digest);
+    expect(config.probes[0]).toMatchObject({
+      name: "image",
+      imageDigestJsonPath: "build.imageDigest",
+    });
+  });
+
+  it("requires an expected digest for runtime image digest markers", async () => {
+    await expect(
+      loadConfig(
+        await configFile(
+          "version: 2\nprovider: coolify\ncoolify:\n  baseUrl: https://coolify.example.test\n  resourceUuid: app-1\ndeployment: {}\nprobes:\n  - name: image\n    url: https://app.example.test/version\n    imageDigestJsonPath: build.imageDigest\n",
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "CONFIG_INVALID" });
+  });
+
+  it("allows an environment supplied digest to satisfy a config v2 runtime marker", async () => {
+    const digest = `sha256:${"c".repeat(64)}`;
+    const path = await configFile(
+      "version: 2\nprovider: coolify\ncoolify:\n  baseUrl: https://coolify.example.test\n  resourceUuid: app-1\ndeployment: {}\nprobes:\n  - name: image\n    url: https://app.example.test/version\n    imageDigestJsonPath: build.imageDigest\n",
+    );
+    const config = await loadConfig(path, {
+      env: { DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST: digest },
+    });
+
+    expect(config.deployment).toMatchObject({ expectedImageDigest: digest });
+  });
+
+  it("rejects ambiguous runtime marker configuration", async () => {
+    await expect(
+      loadConfig(
+        await configFile(
+          `version: 2\nprovider: coolify\ncoolify:\n  baseUrl: https://coolify.example.test\n  resourceUuid: app-1\ndeployment:\n  expectedImageDigest: sha256:${"a".repeat(64)}\nprobes:\n  - name: image\n    url: https://app.example.test/version\n    imageDigestJsonPath: build.imageDigest\n    expectedJson:\n      path: commit\n      value: ${"b".repeat(40)}\n`,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "CONFIG_INVALID" });
+  });
+
+  it("applies the image digest environment override to config v2", async () => {
+    const fileDigest = `sha256:${"a".repeat(64)}`;
+    const envDigest = `sha256:${"b".repeat(64)}`;
+    const path = await configFile(
+      `version: 2\nprovider: coolify\ncoolify:\n  baseUrl: https://coolify.example.test\n  resourceUuid: app-1\ndeployment:\n  expectedImageDigest: ${fileDigest}\n`,
+    );
+    const loaded = await loadConfigDetails(path, {
+      env: { DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST: envDigest },
+    });
+
+    expect(loaded.config.deployment).toMatchObject({
+      expectedImageDigest: envDigest,
+    });
+    expect(loaded.appliedOverrides).toContain(
+      "DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST",
+    );
+    expect(JSON.stringify(loaded.appliedOverrides)).not.toContain(envDigest);
+  });
+
+  it("keeps config v1 strict and requires the new schema version for image digests", async () => {
+    await expect(
+      loadConfig(
+        await configFile(
+          `version: 1\nprovider: coolify\ncoolify:\n  baseUrl: https://coolify.example.test\n  resourceUuid: app-1\ndeployment:\n  expectedImageDigest: sha256:${"a".repeat(64)}\n`,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "CONFIG_INVALID" });
+  });
+
+  it("rejects unsupported config schema versions", async () => {
+    const path = await configFile(
+      "version: 3\nprovider: coolify\ncoolify:\n  baseUrl: https://coolify.example.test\n  resourceUuid: app-1\ndeployment: {}\n",
+    );
+    await expect(loadConfig(path)).rejects.toMatchObject({
+      code: "CONFIG_INVALID",
+    });
+  });
+
   it("accepts an ISO run-start boundary for deployment correlation", async () => {
     const config = await loadConfig(
       await configFile(

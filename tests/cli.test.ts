@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -13,6 +13,20 @@ afterEach(async () => {
 });
 
 describe("CLI configuration commands", () => {
+  it("initializes new configuration files with config v2", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "deploy-witness-cli-"));
+    dirs.push(dir);
+    const path = join(dir, "deploy-witness.yml");
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/cli.ts", "init", "--output", path],
+      { cwd: process.cwd(), encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(await readFile(path, "utf8")).toContain("version: 2");
+  });
+
   it("explains effective sources and planned checks without exposing values", async () => {
     const dir = await mkdtemp(join(tmpdir(), "deploy-witness-cli-"));
     dirs.push(dir);
@@ -32,6 +46,7 @@ describe("CLI configuration commands", () => {
           ...process.env,
           DEPLOY_WITNESS_COOLIFY_BASE_URL:
             "https://environment-target.example.test",
+          DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST: `sha256:${"b".repeat(64)}`,
         },
       },
     );
@@ -39,16 +54,24 @@ describe("CLI configuration commands", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("DEPLOY_WITNESS_COOLIFY_BASE_URL");
     expect(result.stdout).toContain("provider.coolify-api");
+    expect(result.stdout).toContain("deployment.image-digest");
+    expect(result.stdout).toContain("DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST");
     expect(result.stdout).toContain("http.health");
     expect(result.stdout).toContain("Configuration values and secret values");
     expect(result.stdout).not.toContain("private-resource-id");
     expect(result.stdout).not.toContain("environment-target.example.test");
     expect(result.stdout).not.toContain("file-target.example.test");
     expect(result.stdout).not.toContain("a".repeat(40));
+    expect(result.stdout).not.toContain(`sha256:${"b".repeat(64)}`);
   });
 
   it("prints a machine-readable JSON Schema for config and report contracts", () => {
-    for (const name of ["config", "report"] as const) {
+    for (const name of [
+      "config",
+      "config-v1",
+      "config-v2",
+      "report",
+    ] as const) {
       const result = spawnSync(
         process.execPath,
         ["--import", "tsx", "src/cli.ts", "schema", name],

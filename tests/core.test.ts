@@ -26,6 +26,110 @@ function coolifyResponse() {
 }
 
 describe("verification orchestration", () => {
+  it("keeps image digest evidence separate and still runs runtime markers", async () => {
+    const digest = `sha256:${"b".repeat(64)}`.toUpperCase();
+    const configWithImageMarker = VerificationConfigSchema.parse({
+      version: 2,
+      provider: "coolify",
+      coolify: {
+        baseUrl: "https://coolify.example.test",
+        resourceUuid: "application-1",
+      },
+      deployment: { expectedImageDigest: digest },
+      probes: [
+        {
+          name: "image-marker",
+          url: "http://localhost/image",
+          allowLocalHttp: true,
+          imageDigestJsonPath: "image.digest",
+        },
+      ],
+    });
+    const report = await runVerification({
+      config: configWithImageMarker,
+      token: "read-only-token",
+      expectedSha,
+      fetchImpl: async (input) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input.toString(),
+        );
+        return url.pathname === "/image"
+          ? Response.json({ image: { digest: digest.toLowerCase() } })
+          : coolifyResponse();
+      },
+    });
+
+    expect(report.decision).toBe("INCOMPLETE");
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        id: "deployment.image-digest",
+        required: true,
+        status: "UNSUPPORTED",
+        failureCode: "DEPLOYMENT_IMAGE_DIGEST_UNSUPPORTED",
+      }),
+    );
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({ id: "http.image-marker", status: "PASS" }),
+    );
+    expect(report.capabilities).toContainEqual(
+      expect.objectContaining({
+        name: "deployment.image-digest",
+        status: "UNSUPPORTED",
+      }),
+    );
+  });
+
+  it("rejects mutable tags and malformed image digests", async () => {
+    await expect(
+      runVerification({
+        config,
+        token: "read-only-token",
+        expectedSha,
+        expectedImageDigest: "release-1.2.3",
+      }),
+    ).rejects.toThrow("EXPECTED_IMAGE_DIGEST_INVALID");
+  });
+
+  it("does not let a mismatched runtime digest marker pass", async () => {
+    const expectedDigest = `sha256:${"b".repeat(64)}`;
+    const configWithImageMarker = VerificationConfigSchema.parse({
+      version: 2,
+      provider: "coolify",
+      coolify: {
+        baseUrl: "https://coolify.example.test",
+        resourceUuid: "application-1",
+      },
+      deployment: { expectedImageDigest: expectedDigest },
+      probes: [
+        {
+          name: "image-marker",
+          url: "http://localhost/image",
+          allowLocalHttp: true,
+          imageDigestJsonPath: "image.digest",
+        },
+      ],
+    });
+    const report = await runVerification({
+      config: configWithImageMarker,
+      token: "read-only-token",
+      expectedSha,
+      expectedImageDigest: expectedDigest,
+      fetchImpl: async (input) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input.toString(),
+        );
+        return url.pathname === "/image"
+          ? Response.json({ image: { digest: `sha256:${"c".repeat(64)}` } })
+          : coolifyResponse();
+      },
+    });
+
+    expect(report.decision).toBe("FAIL");
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({ id: "http.image-marker", status: "FAIL" }),
+    );
+  });
+
   it("keeps an uncorrelated freshness warning visible without turning it into a required failure", async () => {
     const report = await runVerification({
       config,

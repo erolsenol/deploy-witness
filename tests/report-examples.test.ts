@@ -14,6 +14,43 @@ async function loadExample(name: string) {
 }
 
 describe("published report v1 examples", () => {
+  it("rejects fields outside the report v1 contract at every object level", async () => {
+    const report = await loadExample("report-pass-v1.json");
+
+    expect(() =>
+      VerificationReportSchema.parse({ ...report, futureField: true }),
+    ).toThrow();
+    expect(() =>
+      VerificationReportSchema.parse({
+        ...report,
+        checks: report.checks.map((check, index) =>
+          index === 0 ? { ...check, futureField: true } : check,
+        ),
+      }),
+    ).toThrow();
+    const firstCheck = report.checks[0];
+    if (!firstCheck) throw new Error("Expected report example checks.");
+    expect(() =>
+      VerificationReportSchema.parse({
+        ...report,
+        checks: [
+          {
+            ...firstCheck,
+            evidence: [
+              {
+                source: "test",
+                observedAt: report.createdAt,
+                field: "sha",
+                futureField: true,
+              },
+            ],
+          },
+          ...report.checks.slice(1),
+        ],
+      }),
+    ).toThrow();
+  });
+
   it("keeps correlated successful evidence as PASS", async () => {
     const report = await loadExample("report-pass-v1.json");
     expect(report.decision).toBe("PASS");

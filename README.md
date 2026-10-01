@@ -17,6 +17,7 @@ DeployWitness verifies; it does not deploy, roll back, run migrations, or change
 - Every check is reported separately, with missing or unknown evidence kept visible.
 - Provider capabilities are reported as `SUPPORTED`, `UNSUPPORTED`, or `UNAVAILABLE` for this run, so consumers can distinguish missing support from an inaccessible provider API.
 - Coolify and Vercel status, commit, target, and freshness evidence is evaluated by one shared decision module after each adapter normalizes provider data.
+- An optional expected OCI image digest is checked separately from the Git commit; current Coolify and Vercel deployment APIs do not expose a verified observed image digest, so requesting this check produces required `UNSUPPORTED` evidence and cannot yield PASS.
 
 An HTTP 200 alone does not prove that the requested commit is live. Add a version endpoint or response header if you need an independent runtime commit check.
 
@@ -41,11 +42,11 @@ Requirements: Node.js 22 or newer.
     npm run build
     node dist/cli.js init
     node dist/cli.js config validate
-    node dist/cli.js verify --expected-sha "$GITHUB_SHA" --report deploy-witness-report.json --junit deploy-witness.xml
+node dist/cli.js verify --expected-sha "$GITHUB_SHA" --report deploy-witness-report.json --junit deploy-witness.xml
 
-Set `COOLIFY_API_TOKEN` or `VERCEL_TOKEN` in the environment from your secret manager according to the selected provider before running `verify`. The GitHub Action and source repository are public. npm registry publication is not available yet; use the source checkout for the CLI or pin the Action to a reviewed commit SHA.
+Set `COOLIFY_API_TOKEN` or `VERCEL_TOKEN` in the environment from your secret manager according to the selected provider before running `verify`. The GitHub Action and source repository are public. npm installation will be available after the initial package publication; until then use the source checkout for the CLI or pin the Action to a reviewed commit SHA.
 
-`config validate` checks the effective configuration. `config explain` shows the file path, applied override names, and planned check IDs without printing configuration values. Explicit CLI flags take precedence over these environment variables, which take precedence over YAML/JSON:
+`config validate` checks the effective configuration. `config explain` shows the file path, applied override names, and planned check IDs without printing configuration values. Explicit CLI flags take precedence over environment variables, which take precedence over YAML/JSON:
 
 | Environment variable | Overrides |
 | --- | --- |
@@ -53,6 +54,7 @@ Set `COOLIFY_API_TOKEN` or `VERCEL_TOKEN` in the environment from your secret ma
 | `DEPLOY_WITNESS_COOLIFY_RESOURCE_UUID` | `coolify.resourceUuid` |
 | `DEPLOY_WITNESS_EXPECTED_SHA` | `deployment.expectedSha` |
 | `DEPLOY_WITNESS_STARTED_AFTER` | `deployment.startedAfter` |
+| `DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST` | `deployment.expectedImageDigest` in config v2 |
 | `DEPLOY_WITNESS_VERCEL_PROJECT_ID` | `vercel.projectId` |
 | `DEPLOY_WITNESS_VERCEL_TEAM_ID` | `vercel.teamId` |
 | `DEPLOY_WITNESS_VERCEL_TARGET` | `vercel.target` (`production` or `preview`) |
@@ -61,13 +63,32 @@ Provider tokens are secret inputs and are not part of config inspection or repor
 
 For Vercel, use `node dist/cli.js init --provider vercel`, provide the project ID and target, and set `VERCEL_TOKEN`. Team projects may also set a team ID. DeployWitness lists only that project and target, then requests the deployment detail with Git repository information to compare its full commit SHA. The Vercel token is used only for read-only GET requests.
 
+To record an expected immutable OCI digest, use config v2's `deployment.expectedImageDigest`, pass `--expected-image-digest sha256:<64-hex-characters>` to the CLI, set `DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST`, or use the Action's `expected-image-digest` input. The order is CLI/Action input, environment, then config file. This validates the digest format and emits a required provider digest check. A config v2 probe can use `imageDigestJsonPath` to compare the same expectation with an app runtime marker without duplicating the digest value:
+
+```yaml
+deployment:
+  expectedImageDigest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+probes:
+  - name: runtime-image
+    url: https://app.example.com/api/version
+    imageDigestJsonPath: build.imageDigest
+```
+
+The runtime marker is independent and does not replace provider-side digest evidence. The current [Coolify deployment record](https://coolify.io/docs/api/endpoints/deployments/list-deployments-by-app-uuid) and [Vercel deployment detail](https://vercel.com/docs/rest-api/deployments/get-a-deployment-by-id-or-url) contracts do not include an observed immutable image digest, so this provider check is `UNSUPPORTED` and the overall result is `INCOMPLETE`; a tag or configured image reference is never treated as the observed digest.
+
+See the [image digest evidence decision record](docs/adr/0002-image-digest-evidence.md) for config migration and the separation between provider and runtime digest checks.
+
 The Vercel adapter uses the official [deployment list endpoint](https://vercel.com/docs/rest-api/deployments/list-deployments) scoped by project and target, then the [deployment detail endpoint](https://vercel.com/docs/rest-api/deployments/get-a-deployment-by-id-or-url) with `withGitRepoInfo=true`. Vercel represents preview deployment `target` as `null`; DeployWitness normalizes that documented value to `preview`.
 
 Deployment history is read in bounded pages: Coolify uses its documented [`skip`/`take` pagination](https://coolify.io/docs/api/endpoints/deployments/list-deployments-by-app-uuid), and Vercel follows the documented [`pagination.next` cursor](https://vercel.com/docs/rest-api/deployments/list-deployments) with `until`. The scan stops after five pages or the verification deadline. If that bound is reached before history is complete, deployment ordering is reported as unknown and verification cannot pass on incomplete history.
 
 ## JSON Schema contracts
 
-The versioned config and report schemas live in [`schemas/`](schemas/). Regenerate them after changing the Zod contracts with `npm run schema:generate`; CI checks that the committed schemas stay synchronized. You can also print a schema for tooling with `node dist/cli.js schema config` or `node dist/cli.js schema report`. JSON Schema documents structural constraints; run `config validate` for DeployWitness-specific semantic and security validation before using a configuration.
+The versioned config and report schemas live in [`schemas/`](schemas/). Regenerate them after changing the Zod contracts with `npm run schema:generate`; CI checks that the committed schemas stay synchronized. You can print the current config v2 schema with `node dist/cli.js schema config` or select `config-v1`, `config-v2`, and `report` explicitly. JSON Schema documents structural constraints; run `config validate` for DeployWitness-specific semantic and security validation before using a configuration.
+
+### v1 compatibility boundary
+
+Config v1 accepts only its documented fields and requires `version: 1`; unknown fields and unsupported versions are errors. Config v2 adds `deployment.expectedImageDigest` and is available in [`config-v2.schema.json`](schemas/config-v2.schema.json); new `init` files use v2, while v1 files continue to load unchanged. Report v1 requires `schemaVersion: 1` and rejects fields outside its published schema. Consumers should branch on the config/report version and validate against the matching schema. Changes to a version's decision meanings or shape require a new schema version and migration guidance; a v1 reader must not silently reinterpret a newer version.
 
 Reports include a `capabilities` inventory. `SUPPORTED` means the adapter can verify that behavior, `UNSUPPORTED` means the adapter does not implement it, and `UNAVAILABLE` means a supported feature could not be confirmed because the provider API was inaccessible during that run. Capability information is informational and does not replace required deployment checks.
 
@@ -110,6 +131,10 @@ Create a Coolify configuration with `node dist/cli.js init` or a Vercel configur
 - Reports are diagnostic evidence, not a cryptographic attestation or proof that the provider itself is trustworthy.
 
 See [SECURITY.md](SECURITY.md), [the architecture and roadmap](docs/plan.md), and [the task list](tasks/todo.md).
+
+## Releases
+
+Version tags run the full release quality gate and create a GitHub Release. npm publication is a separate manually dispatched workflow using OIDC Trusted Publishing; configure the `publish-npm.yml` trusted publisher on the npm package first. The workflow checks that the selected tag matches `package.json`, rebuilds and tests the package, and publishes with npm provenance. It uses no long-lived npm token. See [CHANGELOG.md](CHANGELOG.md) for release contents.
 
 ## Development
 

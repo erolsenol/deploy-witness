@@ -49544,7 +49544,8 @@ const EvidenceSchema = object({
     field: schemas_string().min(1),
     expected: EvidenceValueSchema.optional(),
     observed: EvidenceValueSchema.optional(),
-});
+})
+    .strict();
 const CheckResultSchema = object({
     id: schemas_string().regex(/^[a-z0-9][a-z0-9.-]*$/),
     category: schemas_enum(["provider", "deployment", "runtime", "config"]),
@@ -49556,7 +49557,8 @@ const CheckResultSchema = object({
     failureCode: schemas_string()
         .regex(/^[A-Z][A-Z0-9_]*$/)
         .optional(),
-});
+})
+    .strict();
 const VerificationReportSchema = object({
     schemaVersion: literal(1),
     toolVersion: schemas_string().min(1),
@@ -49574,7 +49576,8 @@ const VerificationReportSchema = object({
         .strict())
         .default([]),
     checks: array(CheckResultSchema),
-});
+})
+    .strict();
 const HttpProbeSchema = object({
     name: schemas_string().min(1).max(64),
     url: schemas_string().url(),
@@ -49605,22 +49608,37 @@ const HttpProbeSchema = object({
         .optional(),
 })
     .strict();
-const CommonConfigSchema = object({
-    version: literal(1),
+const HttpProbeV2Schema = HttpProbeSchema.extend({
+    imageDigestJsonPath: schemas_string().min(1).optional(),
+})
+    .strict()
+    .superRefine((probe, context) => {
+    if (probe.imageDigestJsonPath && probe.expectedJson) {
+        context.addIssue({
+            code: "custom",
+            path: ["imageDigestJsonPath"],
+            message: "Use either imageDigestJsonPath or expectedJson on a probe, not both.",
+        });
+    }
+});
+const CommonDeploymentConfigSchema = object({
+    expectedSha: schemas_string()
+        .regex(/^[a-f0-9]{40,64}$/i)
+        .optional(),
+    startedAfter: schemas_string().datetime({ offset: true }).optional(),
+    timeoutSeconds: schemas_number().int().min(10).max(1800).default(600),
+    pollIntervalSeconds: schemas_number().int().min(1).max(60).default(5),
+})
+    .strict();
+const CommonConfigFields = object({
     provider: schemas_enum(["coolify", "vercel"]),
-    deployment: object({
-        expectedSha: schemas_string()
-            .regex(/^[a-f0-9]{40,64}$/i)
-            .optional(),
-        startedAfter: schemas_string().datetime({ offset: true }).optional(),
-        timeoutSeconds: schemas_number().int().min(10).max(1800).default(600),
-        pollIntervalSeconds: schemas_number().int().min(1).max(60).default(5),
-    })
-        .strict(),
+    deployment: CommonDeploymentConfigSchema,
     probes: array(HttpProbeSchema).max(20).default([]),
 });
-const VerificationConfigSchema = discriminatedUnion("provider", [
-    CommonConfigSchema.extend({
+const CommonConfigV1Fields = object({ version: literal(1) })
+    .extend(CommonConfigFields.shape);
+const ConfigV1Schema = discriminatedUnion("provider", [
+    CommonConfigV1Fields.extend({
         provider: literal("coolify"),
         coolify: object({
             baseUrl: schemas_string().url(),
@@ -49628,7 +49646,7 @@ const VerificationConfigSchema = discriminatedUnion("provider", [
         })
             .strict(),
     }).strict(),
-    CommonConfigSchema.extend({
+    CommonConfigV1Fields.extend({
         provider: literal("vercel"),
         vercel: object({
             projectId: schemas_string().min(1).max(128),
@@ -49637,6 +49655,51 @@ const VerificationConfigSchema = discriminatedUnion("provider", [
         })
             .strict(),
     }).strict(),
+]);
+const DeploymentConfigV2Schema = CommonDeploymentConfigSchema.extend({
+    expectedImageDigest: schemas_string()
+        .regex(/^sha256:[a-f0-9]{64}$/i)
+        .optional(),
+}).strict();
+const CommonConfigV2Fields = object({ version: literal(2) })
+    .extend(CommonConfigFields.shape)
+    .extend({
+    deployment: DeploymentConfigV2Schema,
+    probes: array(HttpProbeV2Schema).max(20).default([]),
+});
+const VerificationConfigV2Schema = discriminatedUnion("provider", [
+    CommonConfigV2Fields.extend({
+        provider: literal("coolify"),
+        coolify: object({
+            baseUrl: schemas_string().url(),
+            resourceUuid: schemas_string().min(1).max(128),
+        })
+            .strict(),
+    }).strict(),
+    CommonConfigV2Fields.extend({
+        provider: literal("vercel"),
+        vercel: object({
+            projectId: schemas_string().min(1).max(128),
+            teamId: schemas_string().min(1).max(128).optional(),
+            target: schemas_enum(["production", "preview"]),
+        })
+            .strict(),
+    }).strict(),
+])
+    .superRefine((config, context) => {
+    if (config.probes.some((probe) => probe.imageDigestJsonPath) &&
+        !config.deployment.expectedImageDigest) {
+        context.addIssue({
+            code: "custom",
+            path: ["deployment", "expectedImageDigest"],
+            message: "deployment.expectedImageDigest is required when a probe uses imageDigestJsonPath.",
+        });
+    }
+});
+const VerificationConfigV1Schema = ConfigV1Schema;
+const VerificationConfigSchema = union([
+    VerificationConfigV1Schema,
+    VerificationConfigV2Schema,
 ]);
 function decide(checks) {
     const required = checks.filter((check) => check.required);
@@ -49661,6 +49724,7 @@ const CONFIG_ENV_OVERRIDES = {
     coolifyBaseUrl: "DEPLOY_WITNESS_COOLIFY_BASE_URL",
     coolifyResourceUuid: "DEPLOY_WITNESS_COOLIFY_RESOURCE_UUID",
     expectedSha: "DEPLOY_WITNESS_EXPECTED_SHA",
+    expectedImageDigest: "DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST",
     startedAfter: "DEPLOY_WITNESS_STARTED_AFTER",
     vercelProjectId: "DEPLOY_WITNESS_VERCEL_PROJECT_ID",
     vercelTeamId: "DEPLOY_WITNESS_VERCEL_TEAM_ID",
@@ -49762,6 +49826,11 @@ async function loadConfigDetails(path, options = {}) {
                     : {}),
                 ...(env[CONFIG_ENV_OVERRIDES.startedAfter]
                     ? { startedAfter: env[CONFIG_ENV_OVERRIDES.startedAfter] }
+                    : {}),
+                ...(root.version === 2 && env[CONFIG_ENV_OVERRIDES.expectedImageDigest]
+                    ? {
+                        expectedImageDigest: env[CONFIG_ENV_OVERRIDES.expectedImageDigest],
+                    }
                     : {}),
             },
         };
@@ -50170,7 +50239,12 @@ async function verifySingleHttpProbe(probe, options = {}) {
                     typeof observed === "number" ||
                     typeof observed === "boolean" ||
                     observed === null;
-                const matches = sameScalar(observed, probe.expectedJson.value);
+                const isImageDigestMarker = "imageDigestJsonPath" in probe && Boolean(probe.imageDigestJsonPath);
+                const matches = isImageDigestMarker
+                    ? typeof observed === "string" &&
+                        typeof probe.expectedJson.value === "string" &&
+                        observed.toLowerCase() === probe.expectedJson.value.toLowerCase()
+                    : sameScalar(observed, probe.expectedJson.value);
                 evidence.push({
                     source: "http",
                     observedAt,
@@ -50303,6 +50377,10 @@ const CAPABILITIES = {
             name: "deployment.commit-sha",
             reason: "The adapter compares the commit SHA returned by deployment records.",
         },
+        {
+            name: "deployment.image-digest",
+            reason: "The documented deployment record fields do not provide an observed immutable image digest.",
+        },
     ],
     vercel: [
         {
@@ -50329,12 +50407,17 @@ const CAPABILITIES = {
             name: "deployment.commit-sha",
             reason: "The adapter requests Git source details and compares the full commit SHA.",
         },
+        {
+            name: "deployment.image-digest",
+            reason: "The documented deployment detail fields do not provide an observed immutable image digest.",
+        },
     ],
 };
 function providerCapabilities(provider, apiAvailable) {
     return CAPABILITIES[provider].map((capability) => {
-        const unsupported = provider === "coolify" &&
-            ["deployment.target-filter", "deployment.team-scope"].includes(capability.name);
+        const unsupported = capability.name === "deployment.image-digest" ||
+            (provider === "coolify" &&
+                ["deployment.target-filter", "deployment.team-scope"].includes(capability.name));
         if (unsupported)
             return { ...capability, status: "UNSUPPORTED" };
         if (!apiAvailable)
@@ -50348,7 +50431,7 @@ function providerCapabilities(provider, apiAvailable) {
 }
 //# sourceMappingURL=capabilities.js.map
 ;// CONCATENATED MODULE: ./dist/providers/deployment-evidence.js
-function deployment_evidence_check(id, status, summary, observedAt, startedAt, evidence, failureCode, required = true) {
+function deployment_evidence_check(id, status, summary, _observedAt, startedAt, evidence, failureCode, required = true) {
     return {
         id,
         category: "deployment",
@@ -50447,6 +50530,49 @@ function evaluateDeploymentEvidence(options) {
                     },
                 ]);
     return [statusCheck, commitCheck, freshnessCheck];
+}
+function evaluateImageDigestEvidence(options) {
+    const providerName = options.provider === "coolify" ? "Coolify" : "Vercel";
+    const digestPattern = /^sha256:[a-f0-9]{64}$/i;
+    const observed = options.observedDigest?.toLowerCase();
+    const validExpected = digestPattern.test(options.expectedDigest);
+    const validObserved = observed === undefined || digestPattern.test(observed);
+    const status = !options.supported
+        ? "UNSUPPORTED"
+        : !validExpected || !validObserved || observed === undefined
+            ? "UNKNOWN"
+            : observed === options.expectedDigest.toLowerCase()
+                ? "PASS"
+                : "FAIL";
+    const failureCode = status === "UNSUPPORTED"
+        ? "DEPLOYMENT_IMAGE_DIGEST_UNSUPPORTED"
+        : status === "UNKNOWN"
+            ? !validExpected
+                ? "EXPECTED_IMAGE_DIGEST_INVALID"
+                : !validObserved
+                    ? "DEPLOYMENT_IMAGE_DIGEST_INVALID"
+                    : "DEPLOYMENT_IMAGE_DIGEST_MISSING"
+            : status === "FAIL"
+                ? "DEPLOYMENT_IMAGE_DIGEST_MISMATCH"
+                : undefined;
+    const summary = status === "PASS"
+        ? `${providerName} deployment image digest matches the expected immutable digest.`
+        : status === "FAIL"
+            ? `${providerName} deployment image digest does not match the expected digest.`
+            : status === "UNSUPPORTED"
+                ? `${providerName} does not expose an immutable image digest for this deployment through the verified read-only API fields.`
+                : observed === undefined
+                    ? `${providerName} did not provide an observed image digest.`
+                    : `${providerName} returned an invalid image digest value.`;
+    return deployment_evidence_check("deployment.image-digest", status, summary, options.observedAt, options.startedAt, [
+        {
+            source: options.provider,
+            observedAt: options.observedAt,
+            field: "imageDigest",
+            expected: options.expectedDigest.toLowerCase(),
+            observed: validObserved ? (observed ?? null) : null,
+        },
+    ], failureCode);
 }
 //# sourceMappingURL=deployment-evidence.js.map
 ;// CONCATENATED MODULE: ./dist/providers/coolify/types.js
@@ -51162,6 +51288,8 @@ async function verifyVercelDeployment(options) {
 
 
 
+
+const IMAGE_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/i;
 function skippedRuntimeChecks(config, summary) {
     return config.probes.map((probe) => ({
         id: `http.${probe.name
@@ -51181,9 +51309,21 @@ function skippedRuntimeChecks(config, summary) {
 async function runVerification(options) {
     const { config } = options;
     const startedAfter = options.startedAfter ?? config.deployment.startedAfter;
+    const expectedImageDigest = options.expectedImageDigest ??
+        ("expectedImageDigest" in config.deployment
+            ? config.deployment.expectedImageDigest
+            : undefined);
     if (startedAfter !== undefined &&
         !Number.isFinite(Date.parse(startedAfter))) {
         throw new Error("STARTED_AFTER_INVALID");
+    }
+    if (expectedImageDigest !== undefined &&
+        !IMAGE_DIGEST_PATTERN.test(expectedImageDigest)) {
+        throw new Error("EXPECTED_IMAGE_DIGEST_INVALID");
+    }
+    if (config.probes.some((probe) => "imageDigestJsonPath" in probe && Boolean(probe.imageDigestJsonPath)) &&
+        expectedImageDigest === undefined) {
+        throw new Error("EXPECTED_IMAGE_DIGEST_REQUIRED");
     }
     const providerChecks = config.provider === "coolify"
         ? await verifyCoolifyDeployment({
@@ -51204,15 +51344,46 @@ async function runVerification(options) {
             ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
         });
     const deploymentVerified = providerChecks
-        .filter((result) => result.id.startsWith("provider.") ||
-        result.id.startsWith("deployment."))
+        .filter((result) => [
+        "provider.coolify-api",
+        "provider.vercel-api",
+        "deployment.status",
+        "deployment.commit",
+        "deployment.freshness",
+    ].includes(result.id))
         .every((result) => !result.required || result.status === "PASS");
     const providerApiAvailable = providerChecks.some((result) => result.id.endsWith("-api") &&
         result.category === "provider" &&
         result.status === "PASS");
     const runtimeChecks = deploymentVerified
-        ? await Promise.all(config.probes.map((probe) => verifyHttpProbe(probe, options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})))
+        ? await Promise.all(config.probes.map((probe) => {
+            const runtimeProbe = "imageDigestJsonPath" in probe && probe.imageDigestJsonPath
+                ? {
+                    ...probe,
+                    expectedJson: {
+                        path: probe.imageDigestJsonPath,
+                        value: expectedImageDigest ?? "",
+                    },
+                }
+                : probe;
+            return verifyHttpProbe(runtimeProbe, options.fetchImpl ? { fetchImpl: options.fetchImpl } : {});
+        }))
         : skippedRuntimeChecks(config, "Runtime probes were not run because provider deployment evidence did not pass.");
+    const checks = [
+        ...providerChecks,
+        ...(expectedImageDigest
+            ? [
+                evaluateImageDigestEvidence({
+                    provider: config.provider,
+                    expectedDigest: expectedImageDigest,
+                    supported: false,
+                    observedAt: new Date().toISOString(),
+                    startedAt: Date.now(),
+                }),
+            ]
+            : []),
+        ...runtimeChecks,
+    ];
     return VerificationReportSchema.parse({
         schemaVersion: 1,
         toolVersion: "0.1.0",
@@ -51223,9 +51394,9 @@ async function runVerification(options) {
         resourceUuid: config.provider === "coolify"
             ? config.coolify.resourceUuid
             : config.vercel.projectId,
-        decision: decide([...providerChecks, ...runtimeChecks]),
+        decision: decide(checks),
         capabilities: providerCapabilities(config.provider, providerApiAvailable),
-        checks: [...providerChecks, ...runtimeChecks],
+        checks,
     });
 }
 //# sourceMappingURL=verify.js.map
@@ -51236,7 +51407,18 @@ async function runVerification(options) {
 
 async function main() {
     const configPath = getInput("config", { required: true });
-    const config = await loadConfig(configPath);
+    const expectedImageDigestInput = getInput("expected-image-digest");
+    if (expectedImageDigestInput !== "" &&
+        !/^sha256:[a-f0-9]{64}$/i.test(expectedImageDigestInput)) {
+        throw new Error("Expected image digest must be sha256: followed by 64 hexadecimal characters.");
+    }
+    const configEnv = expectedImageDigestInput
+        ? {
+            ...process.env,
+            DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST: expectedImageDigestInput,
+        }
+        : process.env;
+    const config = await loadConfig(configPath, { env: configEnv });
     const token = getInput(config.provider === "coolify" ? "coolify-token" : "vercel-token", { required: false });
     if (!token)
         throw new Error(config.provider === "coolify"
@@ -51249,11 +51431,22 @@ async function main() {
     if (!expectedSha || !/^[a-f0-9]{40,64}$/i.test(expectedSha))
         throw new Error("Expected a full commit SHA.");
     const startedAfter = getInput("started-after") || config.deployment.startedAfter;
+    const expectedImageDigest = expectedImageDigestInput ||
+        process.env.DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST ||
+        ("expectedImageDigest" in config.deployment
+            ? config.deployment.expectedImageDigest
+            : undefined);
+    if (expectedImageDigest !== undefined &&
+        expectedImageDigest !== "" &&
+        !/^sha256:[a-f0-9]{64}$/i.test(expectedImageDigest)) {
+        throw new Error("Expected image digest must be sha256: followed by 64 hexadecimal characters.");
+    }
     const report = await runVerification({
         config,
         token,
         expectedSha,
         ...(startedAfter ? { startedAfter } : {}),
+        ...(expectedImageDigest ? { expectedImageDigest } : {}),
     });
     const reportPath = getInput("report-path") || "deploy-witness-report.json";
     await (0,promises_namespaceObject.writeFile)(reportPath, `${JSON.stringify(report, null, 2)}\n`, {

@@ -5,7 +5,22 @@ import { runVerification } from "../core/verify.js";
 
 async function main(): Promise<void> {
   const configPath = core.getInput("config", { required: true });
-  const config = await loadConfig(configPath);
+  const expectedImageDigestInput = core.getInput("expected-image-digest");
+  if (
+    expectedImageDigestInput !== "" &&
+    !/^sha256:[a-f0-9]{64}$/i.test(expectedImageDigestInput)
+  ) {
+    throw new Error(
+      "Expected image digest must be sha256: followed by 64 hexadecimal characters.",
+    );
+  }
+  const configEnv = expectedImageDigestInput
+    ? {
+        ...process.env,
+        DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST: expectedImageDigestInput,
+      }
+    : process.env;
+  const config = await loadConfig(configPath, { env: configEnv });
   const token = core.getInput(
     config.provider === "coolify" ? "coolify-token" : "vercel-token",
     { required: false },
@@ -25,11 +40,27 @@ async function main(): Promise<void> {
     throw new Error("Expected a full commit SHA.");
   const startedAfter =
     core.getInput("started-after") || config.deployment.startedAfter;
+  const expectedImageDigest =
+    expectedImageDigestInput ||
+    process.env.DEPLOY_WITNESS_EXPECTED_IMAGE_DIGEST ||
+    ("expectedImageDigest" in config.deployment
+      ? config.deployment.expectedImageDigest
+      : undefined);
+  if (
+    expectedImageDigest !== undefined &&
+    expectedImageDigest !== "" &&
+    !/^sha256:[a-f0-9]{64}$/i.test(expectedImageDigest)
+  ) {
+    throw new Error(
+      "Expected image digest must be sha256: followed by 64 hexadecimal characters.",
+    );
+  }
   const report = await runVerification({
     config,
     token,
     expectedSha,
     ...(startedAfter ? { startedAfter } : {}),
+    ...(expectedImageDigest ? { expectedImageDigest } : {}),
   });
   const reportPath =
     core.getInput("report-path") || "deploy-witness-report.json";

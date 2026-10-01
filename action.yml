@@ -18,6 +18,9 @@ inputs:
   started-after:
     description: ISO timestamp captured before deployment; older deployments fail freshness correlation.
     required: false
+  expected-image-digest:
+    description: Expected immutable OCI digest (sha256:<64 hex characters>); provider digest evidence is currently unsupported.
+    required: false
   report-path:
     description: JSON evidence output path.
     required: false

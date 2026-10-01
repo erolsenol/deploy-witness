@@ -1,9 +1,17 @@
 {
   "name": "deploy-witness",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Verify that the expected commit is live after deployment.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/erolsenol/deploy-witness.git"
+  },
+  "homepage": "https://github.com/erolsenol/deploy-witness#readme",
+  "bugs": {
+    "url": "https://github.com/erolsenol/deploy-witness/issues"
+  },
   "engines": {
     "node": ">=22"
   },
@@ -21,6 +29,7 @@
     "schemas",
     "action.yml",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     "SECURITY.md"
   ],
