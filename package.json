@@ -1,6 +1,6 @@
 {
   "name": "deploy-witness",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Verify that the expected commit is live after deployment.",
   "type": "module",
   "license": "MIT",
@@ -34,6 +34,8 @@
     "SECURITY.md",
     "docs/support-policy.md",
     "docs/staging-validation.md",
+    "docs/ci-integrations.md",
+    "examples/gitlab-ci.yml",
     "docs/adr"
   ],
   "scripts": {

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.7 — 2026-10-01
+
+- Add a GitLab CI consumer example and setup notes for deployment correlation.
+- Pin the README GitHub Action example to the v0.2.6 release commit.
+
 ## 0.2.6 — 2026-10-01
 
 - Publish the first public npm package and document the npm CLI quick start.
