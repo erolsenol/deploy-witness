@@ -1,6 +1,6 @@
 # DeployWitness — Uygulama Görev Listesi
 
-> Progress update (2026-10-01): GitHub Release `v0.2.5` is public. On commit `168d940`, CI passed on Node 22 and 24, including lint, schema/type checks, tests, build, packed-consumer smoke, and package dry-run. The 124-test local pre-push gate also passed. The README quickstart and full-SHA Action pin are current. A manual, read-only Coolify staging E2E workflow now checks correct SHA/runtime marker, wrong-SHA rejection, wrong-marker rejection, report schema, and token redaction. It has not run: the configured Coolify instance contains no DeployWitness staging app, and no staging environment variables/secrets are configured. MVP acceptance remains open until that run passes. The OIDC publish workflow produced provenance but npm rejected the publish with 404. `npm whoami` resolves to `erol.senol`, whose accessible packages list contains only `typedmailer`; first package publication/ownership and Trusted Publisher authorization still need account setup.
+> Progress update (2026-10-01): GitHub Release and public npm package `v0.2.6` are published from commit `a4c6de5`. PR #14 Node 22/24 CI and GitHub Release/npm Trusted Publishing workflows passed; 129 tests, build, packed consumer smoke, and dry-run passed. npm registry reports SLSA provenance for the package, and a clean `npm install deploy-witness@0.2.6` consumer verified CLI version and config v2 schema. The README quickstart and full-SHA Action pin are current. A manual, read-only Coolify staging E2E workflow now checks correct SHA/runtime marker, wrong-SHA rejection, wrong-marker rejection, report schema, and token redaction. It has not run: there is no DeployWitness non-production Coolify app or staging environment variables/secrets. MVP staging acceptance remains open until that live run passes.
 
 Bu liste plan onaylandıktan sonra uygulama sırasıdır. Her görev ayrı ve gözden geçirilebilir bir dilim olarak bitirilir; geniş görevler alt görevlere bölünür.
 
@@ -231,11 +231,11 @@ Bu liste plan onaylandıktan sonra uygulama sırasıdır. Her görev ayrı ve g�
 **İş:** Public repo, npm package ve GitHub Action release’i yayınla; provider genişleme talebini issue template ile topla.
 
 **Kabul ölçütleri:**
-- [ ] README npm install ve full-SHA Action kurulumunu içerir.
-- [ ] npm tarball yalnızca runtime dosyaları, lisans ve gerekli dokümanları içerir.
-- [ ] Changelog, desteklenen runtime, semver ve deprecation politikası var.
+- [x] README npm install ve full-SHA Action kurulumunu içerir.
+- [x] npm tarball yalnızca runtime dosyaları, lisans ve gerekli dokümanları içerir.
+- [x] Changelog, desteklenen runtime, semver ve deprecation politikası var.
 
-**Doğrulama:** npm registry’den temiz consumer install, GitHub Action SHA ile çalıştırma, public CI.
+**Doğrulama:** npm registry’den temiz consumer install ve provenance, public CI; GitHub Action gerçek provider çalıştırması DW-16 staging kabul kapısında.
 **Bağımlılık:** DW-16.
 **Boyut:** M.
 

@@ -1,12 +1,12 @@
 # DeployWitness 0.2+ — Genişletilmiş Ürün ve Teknik Plan
 
-**Durum (2026-10-01):** v0.2.5 GitHub Release mevcut. `168d940` commit’inde Node 22/24 CI (lint, schema/typecheck, tests, build, packed-consumer smoke, package dry-run) geçti; yerel pre-push gate’inde 124 test geçti. README quickstart ve SHA pin düzeltildi; `coolify-staging-e2e.yml` pozitif/negatif kontrolleri tekrar edilebilir hale getiriyor. MVP’nin canlı staging E2E kanıtı yok: bağlı Coolify instance’ında DeployWitness non-production uygulaması bulunmadı. npm registry kurulumu da açık. OIDC publish provenance üretti ancak npm publish 404 ile reddedildi; ilk package bootstrap/sahipliği ve Trusted Publisher yetkisi doğrulanmalı.
-**Temel:** Public `erolsenol/deploy-witness`, güncel GitHub release `v0.2.5`.
+**Durum (2026-10-01):** `v0.2.6` GitHub Release ve npm yayını tamamlandı. PR #14 iki Node sürümünde CI’dan geçti; release/publish workflows başarılı, registry tarball temiz tüketici kurulumunda CLI ve config v2 şemasını verdi. npm Trusted Publisher GitHub OIDC provenance imzası kaydetti. Tek açık MVP kabul kapısı gerçek staging E2E: bağlı Coolify hesabında DeployWitness non-production uygulaması ve staging URL/secret ayarları yok; bu nedenle pozitif/negatif provider kontrolleri çalıştırılmadı. Kod/contract fixture’ları bu canlı kanıtın yerine geçmez.
+**Temel:** Public `erolsenol/deploy-witness`, güncel GitHub release `v0.2.6`.
 **Hedef:** Tek bir sağlayıcı API sonucunu “uygulama kesin doğru sürümde” iddiasına dönüştürmeden; deployment kimliği, gerçek runtime davranışı ve isteğe bağlı build provenance kanıtlarını birleştiren güvenilir, kolay entegre edilebilir bir doğrulama aracı.
 
 ## Mevcut nokta
 
-v0.2.5; Coolify ve Vercel read-only adapter’ları, HTTP probe’ları, strict config, TypeScript CLI, Node 24 GitHub Action, JSON/JUnit raporları ve Node 22/24 CI içeriyor. Kod ve otomatik kalite kapıları MVP temeli olarak hazır. Gerçek hedefte staging doğrulaması ve npm üzerinden clean consumer kurulumu kanıtlanmadığından, müşteri kullanımına hazır olma kapısı açık kalıyor. Bu plan v0.2+ kapsamını ekler; `tasks/todo.md` MVP kabul kapılarını izler.
+v0.2.6; Coolify ve Vercel read-only adapter’ları, HTTP probe’ları, strict config, TypeScript CLI, Node 24 GitHub Action, JSON/JUnit raporları ve Node 22/24 CI içeriyor. Kod, release ve npm tüketici kurulumu doğrulandı. Müşteri MVP kabulü için `tasks/todo.md` içindeki DW-16 gerçek staging E2E kanıtı hâlâ gerekiyor. Bu plan v0.2+ kapsamını ekler; `tasks/todo.md` MVP kabul kapılarını izler.
 
 ## Ürün hedefleri
 
