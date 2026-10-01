@@ -25,7 +25,7 @@ afterEach(async () => {
 
 describe("CLI local Coolify integration", () => {
   it("verifies deployment and runtime markers, then writes redacted JSON and JUnit reports", async () => {
-    const result = await runCliIntegration({ runtimeSha: expectedSha });
+    const result = await runIntegration({ runtimeSha: expectedSha });
 
     expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
     expect(result.stdout).toContain("Decision: PASS");
@@ -45,11 +45,11 @@ describe("CLI local Coolify integration", () => {
     expect(result.junitText).toContain('tests="6"');
     expect(result.junitText).not.toContain(providerToken);
     expect(result.reportMode & 0o777).toBe(0o600);
-    expect(result.junitMode & 0o777).toBe(0o600);
+    expect((result.junitMode ?? 0) & 0o777).toBe(0o600);
   });
 
   it("fails when a healthy runtime exposes a different commit marker", async () => {
-    const result = await runCliIntegration({ runtimeSha: "a".repeat(40) });
+    const result = await runIntegration({ runtimeSha: "a".repeat(40) });
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("Decision: FAIL");
@@ -66,6 +66,38 @@ describe("CLI local Coolify integration", () => {
   });
 });
 
+describe("GitHub Action local Coolify integration", () => {
+  it("uses Action inputs and emits a PASS output and step summary", async () => {
+    const result = await runIntegration({
+      runtimeSha: expectedSha,
+      surface: "action",
+    });
+
+    expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.outputsText).toMatch(/decision<<[^\r\n]+\r?\nPASS\r?\n/);
+    expect(result.outputsText).toContain(result.reportPath);
+    expect(result.summaryText).toContain("DeployWitness: PASS");
+    expect(result.summaryText).toContain("http.runtime-version");
+    expect(result.report.decision).toBe("PASS");
+    expect(result.reportText).not.toContain(providerToken);
+    expect(result.apiAuthorization).toBe(`Bearer ${providerToken}`);
+    expect(result.reportMode & 0o777).toBe(0o600);
+  });
+
+  it("marks the Action failed when a healthy runtime has the wrong commit", async () => {
+    const result = await runIntegration({
+      runtimeSha: "a".repeat(40),
+      surface: "action",
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.outputsText).toMatch(/decision<<[^\r\n]+\r?\nFAIL\r?\n/);
+    expect(result.summaryText).toContain("DeployWitness: FAIL");
+    expect(result.report.decision).toBe("FAIL");
+    expect(result.reportText).not.toContain(providerToken);
+  });
+});
+
 interface RunResult {
   readonly exitCode: number;
   readonly stdout: string;
@@ -78,17 +110,22 @@ interface RunResult {
     }[];
   };
   readonly reportText: string;
-  readonly junitText: string;
+  readonly reportPath: string;
+  readonly junitText?: string;
+  readonly summaryText?: string;
+  readonly outputsText?: string;
   readonly reportMode: number;
-  readonly junitMode: number;
+  readonly junitMode?: number;
   readonly apiAuthorization: string | undefined;
   readonly apiPath: string | undefined;
 }
 
-async function runCliIntegration({
+async function runIntegration({
   runtimeSha,
+  surface = "cli",
 }: {
   readonly runtimeSha: string;
+  readonly surface?: "cli" | "action";
 }): Promise<RunResult> {
   const directory = await mkdtemp(join(tmpdir(), "deploy-witness-e2e-"));
   temporaryDirectories.push(directory);
@@ -150,6 +187,10 @@ async function runCliIntegration({
     const configPath = join(directory, "deploy-witness.json");
     const reportPath = join(directory, "report.json");
     const junitPath = join(directory, "report.xml");
+    const summaryPath = join(directory, "summary.md");
+    const outputsPath = join(directory, "outputs");
+    await writeFile(summaryPath, "", { mode: 0o600 });
+    await writeFile(outputsPath, "", { mode: 0o600 });
     await writeFile(
       configPath,
       JSON.stringify({
@@ -174,27 +215,44 @@ async function runCliIntegration({
       { mode: 0o600 },
     );
 
+    const actionInputs = {
+      INPUT_CONFIG: configPath,
+      "INPUT_COOLIFY-TOKEN": providerToken,
+      "INPUT_EXPECTED-SHA": expectedSha,
+      "INPUT_STARTED-AFTER": deploymentStartedAt,
+      "INPUT_REPORT-PATH": reportPath,
+      GITHUB_OUTPUT: outputsPath,
+      GITHUB_STEP_SUMMARY: summaryPath,
+    };
+    const cliArguments = [
+      "--import",
+      "tsx",
+      "src/cli.ts",
+      "verify",
+      "--config",
+      configPath,
+      "--expected-sha",
+      expectedSha,
+      "--started-after",
+      deploymentStartedAt,
+      "--report",
+      reportPath,
+      "--junit",
+      junitPath,
+    ];
     const child = spawn(
       process.execPath,
-      [
-        "--import",
-        "tsx",
-        "src/cli.ts",
-        "verify",
-        "--config",
-        configPath,
-        "--expected-sha",
-        expectedSha,
-        "--started-after",
-        deploymentStartedAt,
-        "--report",
-        reportPath,
-        "--junit",
-        junitPath,
-      ],
+      surface === "cli"
+        ? cliArguments
+        : ["--import", "tsx", "src/action/index.ts"],
       {
         cwd: process.cwd(),
-        env: { ...process.env, COOLIFY_API_TOKEN: providerToken },
+        env: {
+          ...process.env,
+          ...(surface === "cli"
+            ? { COOLIFY_API_TOKEN: providerToken }
+            : actionInputs),
+        },
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
@@ -208,10 +266,11 @@ async function runCliIntegration({
     });
     const [exitCode] = (await once(child, "close")) as [number | null];
     const reportText = await readFile(reportPath, "utf8");
-    const junitText = await readFile(junitPath, "utf8");
     const report = JSON.parse(reportText) as RunResult["report"];
     const reportMetadata = await stat(reportPath);
-    const junitMetadata = await stat(junitPath);
+    const junitText =
+      surface === "cli" ? await readFile(junitPath, "utf8") : undefined;
+    const junitMetadata = surface === "cli" ? await stat(junitPath) : undefined;
 
     return {
       exitCode: exitCode ?? -1,
@@ -219,9 +278,16 @@ async function runCliIntegration({
       stderr,
       report,
       reportText,
-      junitText,
+      reportPath,
+      ...(junitText ? { junitText } : {}),
+      ...(surface === "action"
+        ? {
+            summaryText: await readFile(summaryPath, "utf8"),
+            outputsText: await readFile(outputsPath, "utf8"),
+          }
+        : {}),
       reportMode: reportMetadata.mode,
-      junitMode: junitMetadata.mode,
+      ...(junitMetadata ? { junitMode: junitMetadata.mode } : {}),
       apiAuthorization,
       apiPath,
     };
