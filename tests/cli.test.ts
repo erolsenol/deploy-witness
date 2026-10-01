@@ -21,7 +21,7 @@ describe("CLI configuration commands", () => {
     );
 
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe("0.2.1");
+    expect(result.stdout.trim()).toBe("0.2.2");
   });
 
   it("initializes new configuration files with config v2", async () => {

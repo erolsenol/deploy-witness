@@ -1,6 +1,6 @@
 {
   "name": "deploy-witness",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Verify that the expected commit is live after deployment.",
   "type": "module",
   "license": "MIT",

@@ -74,7 +74,7 @@ probes:
     imageDigestJsonPath: build.imageDigest
 ```
 
-The runtime marker is independent and does not replace provider-side digest evidence. The current [Coolify deployment record](https://coolify.io/docs/api/endpoints/deployments/list-deployments-by-app-uuid) and [Vercel deployment detail](https://vercel.com/docs/rest-api/deployments/get-a-deployment-by-id-or-url) contracts do not include an observed immutable image digest, so this provider check is `UNSUPPORTED` and the overall result is `INCOMPLETE`; a tag or configured image reference is never treated as the observed digest.
+The runtime marker is independent and does not replace provider-side digest evidence. A valid runtime digest is recorded in the report as the normalized expected and observed values; missing and malformed values are recorded as `null` with distinct failure codes. The current [Coolify deployment record](https://coolify.io/docs/api/endpoints/deployments/list-deployments-by-app-uuid) and [Vercel deployment detail](https://vercel.com/docs/rest-api/deployments/get-a-deployment-by-id-or-url) contracts do not include an observed immutable image digest, so this provider check is `UNSUPPORTED` and the overall result is `INCOMPLETE`; a tag or configured image reference is never treated as the observed digest.
 
 See the [image digest evidence decision record](docs/adr/0002-image-digest-evidence.md) for config migration and the separation between provider and runtime digest checks.
 

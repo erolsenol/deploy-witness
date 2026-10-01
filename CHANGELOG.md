@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 — 2026-10-01
+
+- Include valid observed runtime image digests in report evidence and distinguish missing, malformed, and mismatched markers.
+
 ## 0.2.1 — 2026-10-01
 
 - Report the package version consistently from the CLI and JSON evidence reports.
