@@ -1,6 +1,6 @@
 # DeployWitness — Uygulama Görev Listesi
 
-> Progress update (2026-10-01): GitHub Release and public npm package `v0.2.6` are published from commit `a4c6de5`. PR #14 Node 22/24 CI and GitHub Release/npm Trusted Publishing workflows passed; 129 tests, build, packed consumer smoke, and dry-run passed. npm registry reports SLSA provenance for the package, and a clean `npm install deploy-witness@0.2.6` consumer verified CLI version and config v2 schema. The README quickstart and full-SHA Action pin are current. A manual, read-only Coolify staging E2E workflow now checks correct SHA/runtime marker, wrong-SHA rejection, wrong-marker rejection, report schema, and token redaction. It has not run: there is no DeployWitness non-production Coolify app or staging environment variables/secrets. MVP staging acceptance remains open until that live run passes.
+> Progress update (2026-10-01): GitHub Release and npm package `v0.2.7` are public from release commit `ba87b76`. PR #19 Node 22/24 CI and Release/npm Trusted Publishing workflows passed; 136 tests, build, packed consumer smoke, and dry-run passed. npm metadata exposes SLSA provenance, and a clean registry install verified CLI `0.2.7` and config v2 schema. README pins the GitHub Action to the full v0.2.6 commit SHA; a GitLab CI deploy/verify example is included in the npm tarball. The manual Coolify staging workflow requires explicit non-production confirmation and covers positive/wrong-SHA/wrong-marker cases, report schema, and token redaction. Live staging has not run because no non-production app or staging settings are available; MVP staging acceptance remains open.
 
 Bu liste plan onaylandıktan sonra uygulama sırasıdır. Her görev ayrı ve gözden geçirilebilir bir dilim olarak bitirilir; geniş görevler alt görevlere bölünür.
 
@@ -387,12 +387,12 @@ Detaylı mimari, scope, güvenlik modeli ve release kapıları [`tasks/plan.md`]
 
 **İş:** İlk package bootstrap’i tamamlandıktan sonra tag bazlı npm Trusted Publishing workflow’u ve doğrulama rehberini ekle.
 
-**İlerleme (2026-10-01):** Node 24 OIDC publish workflow’u `publish-npm.yml` adıyla eklendi; `id-token: write`, release-tag/package-version eşleşmesi, kalite kapıları ve provenance’lı publish adımı var. `package.json` GitHub repository metadata’sı eklendi. npm paketi henüz registry’de yok ve bu çalışma alanındaki npm oturumu kimlik doğrulamamış (`npm whoami` 401); ilk npm package bootstrap’i ve npm Trusted Publisher ayarı bu nedenle tamamlanamadı.
+**İlerleme (2026-10-01):** Tag/environment kısıtlı `publish-npm.yml`, minimum `id-token: write` izniyle token’sız Trusted Publishing kullanıyor. `v0.2.7` registry’de görünür; SLSA provenance metadata’sı ve temiz consumer install doğrulandı.
 
 **Kabul ölçütleri:**
-- [ ] Release workflow yalnızca protected tag/environment ile çalışır, minimum OIDC izinlerini alır.
-- [ ] Uzun ömürlü npm publish token kullanılmaz; provenance otomatik oluşur.
-- [ ] Paketin registry kurulumu ve provenance doğrulaması release gate’inden geçer.
+- [x] Release workflow yalnızca protected tag/environment ile çalışır, minimum OIDC izinlerini alır.
+- [x] Uzun ömürlü npm publish token kullanılmaz; provenance otomatik oluşur.
+- [x] Paketin registry kurulumu ve provenance doğrulaması release gate’inden geçer.
 
 **Doğrulama:** Test/staged package veya kontrollü public prerelease; registry version, tarball contents ve provenance kontrolü.
 **Bağımlılık:** npm package hesabında Trusted Publisher bootstrap ayarı ve release approval.
@@ -402,13 +402,13 @@ Detaylı mimari, scope, güvenlik modeli ve release kapıları [`tasks/plan.md`]
 
 **İş:** Monorepo örneği, GitHub dışı CI örneği, support/security politikaları ve v1 API kararlılık kontrolünü hazırla.
 
-**İlerleme (2026-10-01):** CI ve tag release gate’ine gerçek npm tarball’ını geçici consumer dizinine kuran smoke eklendi. Test kurulu paketten CLI sürümünü, config-v2 JSON Schema çıktısını, `VerificationConfigSchema` public import’unu ve Action manifestini doğruluyor.
+**İlerleme (2026-10-01):** CI ve tag release gate’ine gerçek npm tarball’ını geçici consumer dizinine kuran smoke eklendi. Test kurulu paketten CLI sürümünü, config-v2 JSON Schema çıktısını, `VerificationConfigSchema` public import’unu ve Action manifestini doğruluyor. GitLab deploy/verify örneği YAML sözleşme testiyle, CLI ve Node Action ise yerel Coolify fixture’ında pozitif/negatif akışlarla doğrulanıyor.
 
 **İlerleme (2026-10-01):** Destek matrisi ve 0.x semver/config-report schema geçiş kuralları `docs/support-policy.md` içinde yayımlandı; güvenlik ve genel hata bildirim kanalları, veri redaksiyonu ve yanıt süresi taahhüdü olmadığı da açıklandı.
 
 **Kabul ölçütleri:**
-- [ ] CLI, Node Action ve GitHub dışı CI örneği clean consumer’da çalışır.
-- [ ] Security response, support matrix, semver ve schema migration policy yayınlanır.
+- [x] CLI, Node Action ve GitHub dışı CI örneği clean consumer’da çalışır.
+- [x] Security response, support matrix, semver ve schema migration policy yayınlanır.
 - [ ] v1.0 yalnızca en az iki provider, P0 security, consumer ve release gate’leri geçtiğinde aday olur.
 
 **Doğrulama:** CI matrix, consumer smoke, staging positive/negative controls ve release checklist.

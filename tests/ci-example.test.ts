@@ -54,4 +54,44 @@ describe("published CI consumer examples", () => {
       "uses: erolsenol/deploy-witness@a4c6de5d9baebb7e568691f5b5af7c34b9c941dc",
     );
   });
+
+  it("waits for npm publication and verifies the registry consumer", async () => {
+    const workflow = parse(
+      await readFile(".github/workflows/publish-npm.yml", "utf8"),
+    ) as {
+      readonly jobs: {
+        readonly publish: {
+          readonly steps: readonly {
+            readonly name?: string;
+            readonly run?: string;
+          }[];
+        };
+      };
+    };
+    const steps = workflow.jobs.publish.steps;
+
+    expect(steps.map((step) => step.name)).toContain(
+      "Wait for registry visibility and verify provenance",
+    );
+    expect(steps.map((step) => step.name)).toContain(
+      "Smoke-test the published registry package",
+    );
+    expect(
+      steps.find(
+        (step) =>
+          step.name === "Wait for registry visibility and verify provenance",
+      )?.run,
+    ).toContain("for attempt in {1..48}");
+    expect(
+      steps.find(
+        (step) =>
+          step.name === "Wait for registry visibility and verify provenance",
+      )?.run,
+    ).toContain("slsa.dev/provenance/v1");
+    expect(
+      steps.find(
+        (step) => step.name === "Smoke-test the published registry package",
+      )?.run,
+    ).toContain("schema config-v2");
+  });
 });

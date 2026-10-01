@@ -1,7 +1,7 @@
 # DeployWitness 0.2+ — Genişletilmiş Ürün ve Teknik Plan
 
-**Durum (2026-10-01):** `v0.2.6` GitHub Release ve npm yayını tamamlandı. PR #14 iki Node sürümünde CI’dan geçti; release/publish workflows başarılı, registry tarball temiz tüketici kurulumunda CLI ve config v2 şemasını verdi. npm Trusted Publisher GitHub OIDC provenance imzası kaydetti. Tek açık MVP kabul kapısı gerçek staging E2E: bağlı Coolify hesabında DeployWitness non-production uygulaması ve staging URL/secret ayarları yok; bu nedenle pozitif/negatif provider kontrolleri çalıştırılmadı. Kod/contract fixture’ları bu canlı kanıtın yerine geçmez.
-**Temel:** Public `erolsenol/deploy-witness`, güncel GitHub release `v0.2.6`.
+**Durum (2026-10-01):** `v0.2.7` GitHub Release ve npm yayını tamamlandı. PR #19 Node 22/24 CI’dan geçti; 136 test, build, consumer smoke ve dry-run başarılıydı. npm registry’de sürüm ve SLSA provenance görünür; temiz npm consumer kurulumu CLI `0.2.7` ve config v2 şemasını doğruladı. README Action örneği v0.2.6’in tam SHA’sına pinli ve GitLab CI tüketici örneği yayımlanan pakette. Tek açık MVP kabul kapısı gerçek staging E2E: DeployWitness non-production Coolify uygulaması/ayarları hâlâ yok; provider positive/negative kontrolleri çalıştırılmadı.
+**Temel:** Public `erolsenol/deploy-witness`, güncel GitHub release `v0.2.7`.
 **Hedef:** Tek bir sağlayıcı API sonucunu “uygulama kesin doğru sürümde” iddiasına dönüştürmeden; deployment kimliği, gerçek runtime davranışı ve isteğe bağlı build provenance kanıtlarını birleştiren güvenilir, kolay entegre edilebilir bir doğrulama aracı.
 
 ## Mevcut nokta
