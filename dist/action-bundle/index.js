@@ -50119,6 +50119,37 @@ function sameScalar(left, right) {
         left === null) &&
         left === right);
 }
+const OCI_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/i;
+function evaluateRuntimeImageDigest(path, expected, observed, observedAt) {
+    const expectedDigest = typeof expected === "string" ? expected : undefined;
+    const observedDigest = typeof observed === "string" ? observed : undefined;
+    const validExpected = expectedDigest !== undefined && OCI_DIGEST_PATTERN.test(expectedDigest);
+    const validObserved = observedDigest !== undefined && OCI_DIGEST_PATTERN.test(observedDigest);
+    const matches = validExpected &&
+        validObserved &&
+        expectedDigest.toLowerCase() === observedDigest.toLowerCase();
+    return {
+        evidence: {
+            source: "http",
+            observedAt,
+            field: `imageDigest:${path}`,
+            expected: validExpected ? expectedDigest.toLowerCase() : null,
+            observed: validObserved ? observedDigest.toLowerCase() : null,
+        },
+        matches,
+        ...(!matches
+            ? {
+                failureCode: !validExpected
+                    ? "RUNTIME_IMAGE_DIGEST_EXPECTATION_INVALID"
+                    : observedDigest === undefined
+                        ? "RUNTIME_IMAGE_DIGEST_MISSING"
+                        : !validObserved
+                            ? "RUNTIME_IMAGE_DIGEST_INVALID"
+                            : "RUNTIME_IMAGE_DIGEST_MISMATCH",
+            }
+            : {}),
+    };
+}
 function checkResult(probe, status, summary, _observedAt, durationMs, evidence, failureCode) {
     const idPart = probe.name
         .toLowerCase()
@@ -50195,6 +50226,7 @@ async function verifySingleHttpProbe(probe, options = {}) {
         },
     ];
     const problems = [];
+    let runtimeDigestFailureCode;
     if (response.status !== probe.expectedStatus)
         problems.push("HTTP status did not match the expected value");
     if (probe.expectedHeader) {
@@ -50240,29 +50272,38 @@ async function verifySingleHttpProbe(probe, options = {}) {
                     typeof observed === "boolean" ||
                     observed === null;
                 const isImageDigestMarker = "imageDigestJsonPath" in probe && Boolean(probe.imageDigestJsonPath);
-                const matches = isImageDigestMarker
-                    ? typeof observed === "string" &&
-                        typeof probe.expectedJson.value === "string" &&
-                        observed.toLowerCase() === probe.expectedJson.value.toLowerCase()
+                const digestEvaluation = isImageDigestMarker
+                    ? evaluateRuntimeImageDigest(probe.expectedJson.path, probe.expectedJson.value, observed, observedAt)
+                    : undefined;
+                const matches = digestEvaluation
+                    ? digestEvaluation.matches
                     : sameScalar(observed, probe.expectedJson.value);
-                evidence.push({
+                evidence.push(digestEvaluation?.evidence ?? {
                     source: "http",
                     observedAt,
                     field: `json:${probe.expectedJson.path}:matches`,
                     expected: true,
                     observed: isScalar && matches,
                 });
+                if (digestEvaluation?.failureCode)
+                    runtimeDigestFailureCode = digestEvaluation.failureCode;
                 if (!matches)
                     problems.push("Expected JSON marker did not match");
             }
             else {
-                evidence.push({
+                const isImageDigestMarker = "imageDigestJsonPath" in probe && Boolean(probe.imageDigestJsonPath);
+                const digestEvaluation = isImageDigestMarker
+                    ? evaluateRuntimeImageDigest(probe.expectedJson.path, probe.expectedJson.value, undefined, observedAt)
+                    : undefined;
+                evidence.push(digestEvaluation?.evidence ?? {
                     source: "http",
                     observedAt,
                     field: `json:${probe.expectedJson.path}:matches`,
                     expected: true,
                     observed: false,
                 });
+                if (digestEvaluation?.failureCode)
+                    runtimeDigestFailureCode = digestEvaluation.failureCode;
                 problems.push("Response body was empty");
             }
         }
@@ -50272,7 +50313,11 @@ async function verifySingleHttpProbe(probe, options = {}) {
     const status = problems.length === 0 ? "PASS" : "FAIL";
     return checkResult(probe, status, problems.length === 0
         ? "HTTP endpoint and configured runtime markers matched."
-        : `${problems.join("; ")}.`, observedAt, Date.now() - started, evidence, problems.length === 0 ? undefined : "HTTP_PROBE_FAILED");
+        : `${problems.join("; ")}.`, observedAt, Date.now() - started, evidence, problems.length === 0
+        ? undefined
+        : response.status === probe.expectedStatus
+            ? (runtimeDigestFailureCode ?? "HTTP_PROBE_FAILED")
+            : "HTTP_PROBE_FAILED");
 }
 async function verifyHttpProbe(probe, options = {}) {
     if (!probe.stability || probe.stability.consecutiveSuccesses === 1) {
@@ -51282,7 +51327,7 @@ async function verifyVercelDeployment(options) {
 }
 //# sourceMappingURL=verify.js.map
 ;// CONCATENATED MODULE: ./dist/version.js
-const TOOL_VERSION = "0.2.1";
+const TOOL_VERSION = "0.2.2";
 //# sourceMappingURL=version.js.map
 ;// CONCATENATED MODULE: ./dist/core/verify.js
 

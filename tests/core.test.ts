@@ -127,7 +127,18 @@ describe("verification orchestration", () => {
 
     expect(report.decision).toBe("FAIL");
     expect(report.checks).toContainEqual(
-      expect.objectContaining({ id: "http.image-marker", status: "FAIL" }),
+      expect.objectContaining({
+        id: "http.image-marker",
+        status: "FAIL",
+        failureCode: "RUNTIME_IMAGE_DIGEST_MISMATCH",
+        evidence: expect.arrayContaining([
+          expect.objectContaining({
+            field: "imageDigest:image.digest",
+            expected: expectedDigest,
+            observed: `sha256:${"c".repeat(64)}`,
+          }),
+        ]),
+      }),
     );
   });
 

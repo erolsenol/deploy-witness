@@ -41,6 +41,75 @@ describe("HTTP runtime probes", () => {
     ).toBe(true);
   });
 
+  it("records the actual runtime digest as normalized evidence", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
+    const result = await verifyHttpProbe(
+      {
+        ...baseProbe,
+        imageDigestJsonPath: "build.imageDigest",
+        expectedJson: { path: "build.imageDigest", value: digest },
+      },
+      {
+        fetchImpl: async () =>
+          Response.json({ build: { imageDigest: digest.toUpperCase() } }),
+        lookupImpl: publicLookup,
+      },
+    );
+
+    expect(result.status).toBe("PASS");
+    expect(result.evidence).toContainEqual({
+      source: "http",
+      observedAt: expect.any(String),
+      field: "imageDigest:build.imageDigest",
+      expected: digest,
+      observed: digest,
+    });
+  });
+
+  it.each([
+    {
+      label: "missing",
+      payload: { build: {} },
+      failureCode: "RUNTIME_IMAGE_DIGEST_MISSING",
+      observed: null,
+    },
+    {
+      label: "malformed",
+      payload: { build: { imageDigest: "release-2026-10" } },
+      failureCode: "RUNTIME_IMAGE_DIGEST_INVALID",
+      observed: null,
+    },
+    {
+      label: "different",
+      payload: { build: { imageDigest: `sha256:${"b".repeat(64)}` } },
+      failureCode: "RUNTIME_IMAGE_DIGEST_MISMATCH",
+      observed: `sha256:${"b".repeat(64)}`,
+    },
+  ])("classifies a $label runtime image digest marker", async (scenario) => {
+    const digest = `sha256:${"a".repeat(64)}`;
+    const result = await verifyHttpProbe(
+      {
+        ...baseProbe,
+        imageDigestJsonPath: "build.imageDigest",
+        expectedJson: { path: "build.imageDigest", value: digest },
+      },
+      {
+        fetchImpl: async () => Response.json(scenario.payload),
+        lookupImpl: publicLookup,
+      },
+    );
+
+    expect(result.status).toBe("FAIL");
+    expect(result.failureCode).toBe(scenario.failureCode);
+    expect(result.evidence).toContainEqual({
+      source: "http",
+      observedAt: expect.any(String),
+      field: "imageDigest:build.imageDigest",
+      expected: digest,
+      observed: scenario.observed,
+    });
+  });
+
   it("does not follow redirects", async () => {
     const result = await verifyHttpProbe(baseProbe, {
       fetchImpl: async () =>

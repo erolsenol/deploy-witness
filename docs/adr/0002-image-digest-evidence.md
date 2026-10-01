@@ -15,6 +15,7 @@ An expected OCI digest can identify immutable image content, but providers may e
 - The provider digest check is required when an expected digest is supplied. It passes only for an exact normalized digest match, fails on a mismatch, and is UNKNOWN for missing or malformed observations. If the adapter cannot read a deployment-scoped immutable digest, it reports required `UNSUPPORTED`; this makes the overall result `INCOMPLETE`.
 - Configured image tags, references, labels, and build arguments do not count as observed provider digests.
 - A runtime marker is a separate HTTP check. Matching the expected digest at runtime does not replace provider-side digest evidence; a mismatch remains a required failure.
+- A valid runtime marker records normalized expected and observed digests. Missing and malformed observations record `null` and use failure codes distinct from a valid digest mismatch.
 - Report v1 needs no shape change: digest results use the existing check and scalar evidence contract.
 
 ## Consequences

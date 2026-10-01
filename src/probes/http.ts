@@ -105,6 +105,54 @@ function sameScalar(left: unknown, right: unknown): boolean {
   );
 }
 
+const OCI_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/i;
+
+interface RuntimeImageDigestEvaluation {
+  readonly evidence: CheckResult["evidence"][number];
+  readonly matches: boolean;
+  readonly failureCode?: string;
+}
+
+function evaluateRuntimeImageDigest(
+  path: string,
+  expected: unknown,
+  observed: unknown,
+  observedAt: string,
+): RuntimeImageDigestEvaluation {
+  const expectedDigest = typeof expected === "string" ? expected : undefined;
+  const observedDigest = typeof observed === "string" ? observed : undefined;
+  const validExpected =
+    expectedDigest !== undefined && OCI_DIGEST_PATTERN.test(expectedDigest);
+  const validObserved =
+    observedDigest !== undefined && OCI_DIGEST_PATTERN.test(observedDigest);
+  const matches =
+    validExpected &&
+    validObserved &&
+    expectedDigest.toLowerCase() === observedDigest.toLowerCase();
+
+  return {
+    evidence: {
+      source: "http",
+      observedAt,
+      field: `imageDigest:${path}`,
+      expected: validExpected ? expectedDigest.toLowerCase() : null,
+      observed: validObserved ? observedDigest.toLowerCase() : null,
+    },
+    matches,
+    ...(!matches
+      ? {
+          failureCode: !validExpected
+            ? "RUNTIME_IMAGE_DIGEST_EXPECTATION_INVALID"
+            : observedDigest === undefined
+              ? "RUNTIME_IMAGE_DIGEST_MISSING"
+              : !validObserved
+                ? "RUNTIME_IMAGE_DIGEST_INVALID"
+                : "RUNTIME_IMAGE_DIGEST_MISMATCH",
+        }
+      : {}),
+  };
+}
+
 function checkResult(
   probe: HttpProbeConfig,
   status: CheckResult["status"],
@@ -246,6 +294,7 @@ async function verifySingleHttpProbe(
     },
   ];
   const problems: string[] = [];
+  let runtimeDigestFailureCode: string | undefined;
   if (response.status !== probe.expectedStatus)
     problems.push("HTTP status did not match the expected value");
 
@@ -292,27 +341,51 @@ async function verifySingleHttpProbe(
           observed === null;
         const isImageDigestMarker =
           "imageDigestJsonPath" in probe && Boolean(probe.imageDigestJsonPath);
-        const matches = isImageDigestMarker
-          ? typeof observed === "string" &&
-            typeof probe.expectedJson.value === "string" &&
-            observed.toLowerCase() === probe.expectedJson.value.toLowerCase()
+        const digestEvaluation = isImageDigestMarker
+          ? evaluateRuntimeImageDigest(
+              probe.expectedJson.path,
+              probe.expectedJson.value,
+              observed,
+              observedAt,
+            )
+          : undefined;
+        const matches = digestEvaluation
+          ? digestEvaluation.matches
           : sameScalar(observed, probe.expectedJson.value);
-        evidence.push({
-          source: "http",
-          observedAt,
-          field: `json:${probe.expectedJson.path}:matches`,
-          expected: true,
-          observed: isScalar && matches,
-        });
+        evidence.push(
+          digestEvaluation?.evidence ?? {
+            source: "http",
+            observedAt,
+            field: `json:${probe.expectedJson.path}:matches`,
+            expected: true,
+            observed: isScalar && matches,
+          },
+        );
+        if (digestEvaluation?.failureCode)
+          runtimeDigestFailureCode = digestEvaluation.failureCode;
         if (!matches) problems.push("Expected JSON marker did not match");
       } else {
-        evidence.push({
-          source: "http",
-          observedAt,
-          field: `json:${probe.expectedJson.path}:matches`,
-          expected: true,
-          observed: false,
-        });
+        const isImageDigestMarker =
+          "imageDigestJsonPath" in probe && Boolean(probe.imageDigestJsonPath);
+        const digestEvaluation = isImageDigestMarker
+          ? evaluateRuntimeImageDigest(
+              probe.expectedJson.path,
+              probe.expectedJson.value,
+              undefined,
+              observedAt,
+            )
+          : undefined;
+        evidence.push(
+          digestEvaluation?.evidence ?? {
+            source: "http",
+            observedAt,
+            field: `json:${probe.expectedJson.path}:matches`,
+            expected: true,
+            observed: false,
+          },
+        );
+        if (digestEvaluation?.failureCode)
+          runtimeDigestFailureCode = digestEvaluation.failureCode;
         problems.push("Response body was empty");
       }
     }
@@ -330,7 +403,11 @@ async function verifySingleHttpProbe(
     observedAt,
     Date.now() - started,
     evidence,
-    problems.length === 0 ? undefined : "HTTP_PROBE_FAILED",
+    problems.length === 0
+      ? undefined
+      : response.status === probe.expectedStatus
+        ? (runtimeDigestFailureCode ?? "HTTP_PROBE_FAILED")
+        : "HTTP_PROBE_FAILED",
   );
 }
 
